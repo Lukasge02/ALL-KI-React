@@ -1,0 +1,11 @@
+# 1. Status checken (was wurde geändert?)
+git status
+
+# 2. Änderungen hinzufügen
+git add .
+
+# 3. COMMIT erstellen (das fehlte!)
+git commit -m "Deine Commit-Nachricht hier"
+
+# 4. Hochladen
+git push origin main

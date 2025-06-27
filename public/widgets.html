@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All-KI - Widgets</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/widgets.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-top">
+                <h2 class="logo">ALL-KI</h2>
+                <nav class="nav-links">
+                    <a href="dashboard.html" class="nav-link">
+                        <span class="icon">🏠</span>
+                        <span class="text">Dashboard</span>
+                    </a>
+                    <a href="#" class="nav-link active">
+                        <span class="icon">🧩</span>
+                        <span class="text">Widgets</span>
+                    </a>
+                    <a href="#" class="nav-link" data-section="profiles">
+                        <span class="icon">👤</span>
+                        <span class="text">Profile</span>
+                    </a>
+                    <a href="#" class="nav-link" data-section="calendar">
+                        <span class="icon">📅</span>
+                        <span class="text">Kalender</span>
+                    </a>
+                    <a href="#" class="nav-link" data-section="email">
+                        <span class="icon">📧</span>
+                        <span class="text">E-Mail</span>
+                    </a>
+                </nav>
+            </div>
+            <div class="sidebar-bottom">
+                <a href="#" class="nav-link">
+                    <span class="icon">ℹ️</span>
+                    <span class="text">Infos</span>
+                </a>
+                <a href="#" class="nav-link">
+                    <span class="icon">⚙️</span>
+                    <span class="text">Einstellungen</span>
+                </a>
+                <a href="#" class="nav-link" id="logout-btn">
+                    <span class="icon">🚪</span>
+                    <span class="text">Abmelden</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header -->
+            <div class="header">
+                <div class="widgets-header-content">
+                    <div class="widgets-title">
+                        <h1>🧩 Widget Dashboard</h1>
+                        <p>Personalisiere dein Dashboard mit intelligenten Widgets</p>
+                    </div>
+                    <div class="widgets-controls">
+                        <button class="btn-secondary" id="layoutModeBtn">
+                            <span class="icon">📐</span>
+                            <span>Layout bearbeiten</span>
+                        </button>
+                        <button class="btn-primary" id="addWidgetBtn">
+                            <span class="icon">➕</span>
+                            <span>Widget hinzufügen</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Widget Categories Filter -->
+            <div class="widget-filters">
+                <div class="filter-tabs">
+                    <button class="filter-tab active" data-category="all">
+                        <span class="icon">🎯</span>
+                        <span>Alle</span>
+                    </button>
+                    <button class="filter-tab" data-category="productivity">
+                        <span class="icon">⚡</span>
+                        <span>Produktivität</span>
+                    </button>
+                    <button class="filter-tab" data-category="health">
+                        <span class="icon">🏥</span>
+                        <span>Gesundheit</span>
+                    </button>
+                    <button class="filter-tab" data-category="finance">
+                        <span class="icon">💰</span>
+                        <span>Finanzen</span>
+                    </button>
+                    <button class="filter-tab" data-category="learning">
+                        <span class="icon">📚</span>
+                        <span>Lernen</span>
+                    </button>
+                    <button class="filter-tab" data-category="social">
+                        <span class="icon">👥</span>
+                        <span>Sozial</span>
+                    </button>
+                    <button class="filter-tab" data-category="smart-home">
+                        <span class="icon">🏠</span>
+                        <span>Smart Home</span>
+                    </button>
+                </div>
+                <div class="filter-actions">
+                    <select id="sortWidgets" class="filter-select">
+                        <option value="recent">Zuletzt verwendet</option>
+                        <option value="alphabetical">Alphabetisch</option>
+                        <option value="category">Nach Kategorie</option>
+                        <option value="size">Nach Größe</option>
+                    </select>
+                    <button class="filter-btn" id="refreshAllBtn" title="Alle Widgets aktualisieren">
+                        <span>🔄</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Widgets Grid -->
+            <div class="widgets-content">
+                <div class="widgets-grid" id="widgetsGrid">
+                    <!-- Widgets werden hier dynamisch eingefügt -->
+                    
+                    <!-- Add Widget Placeholder -->
+                    <div class="widget-placeholder" id="addWidgetPlaceholder">
+                        <div class="placeholder-content">
+                            <div class="placeholder-icon">➕</div>
+                            <h3>Erstes Widget hinzufügen</h3>
+                            <p>Klicke hier, um dein erstes Widget zu erstellen und dein Dashboard zu personalisieren.</p>
+                            <button class="btn-primary" onclick="widgetManager.openWidgetSelector()">
+                                Widget auswählen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Widget Selection Modal -->
+    <div class="modal-overlay hidden" id="widgetSelectionModal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3>🧩 Widget hinzufügen</h3>
+                <button class="modal-close" onclick="widgetManager.closeWidgetSelector()">✕</button>
+            </div>
+            <div class="widget-categories-grid" id="widgetCategoriesGrid">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Widget Configuration Modal -->
+    <div class="modal-overlay hidden" id="widgetConfigModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="configModalTitle">Widget konfigurieren</h3>
+                <button class="modal-close" onclick="widgetManager.closeConfigModal()">✕</button>
+            </div>
+            <div class="widget-config-content" id="widgetConfigContent">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="widgetManager.closeConfigModal()">Abbrechen</button>
+                <button class="btn-primary" onclick="widgetManager.saveWidgetConfig()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Widget Details Modal -->
+    <div class="modal-overlay hidden" id="widgetDetailsModal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3 id="detailsModalTitle">Widget Details</h3>
+                <button class="modal-close" onclick="widgetManager.closeDetailsModal()">✕</button>
+            </div>
+            <div class="widget-details-content" id="widgetDetailsContent">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <p>Widgets werden geladen...</p>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Context Menu -->
+    <div class="context-menu hidden" id="widgetContextMenu">
+        <div class="context-menu-item" onclick="widgetManager.refreshWidget()">
+            <span class="icon">🔄</span>
+            <span>Aktualisieren</span>
+        </div>
+        <div class="context-menu-item" onclick="widgetManager.configureWidget()">
+            <span class="icon">⚙️</span>
+            <span>Konfigurieren</span>
+        </div>
+        <div class="context-menu-item" onclick="widgetManager.resizeWidget()">
+            <span class="icon">📏</span>
+            <span>Größe ändern</span>
+        </div>
+        <div class="context-menu-item" onclick="widgetManager.duplicateWidget()">
+            <span class="icon">📋</span>
+            <span>Duplizieren</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" onclick="widgetManager.exportWidget()">
+            <span class="icon">📤</span>
+            <span>Exportieren</span>
+        </div>
+        <div class="context-menu-item danger" onclick="widgetManager.deleteWidget()">
+            <span class="icon">🗑️</span>
+            <span>Löschen</span>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/widgets/widget-manager.js"></script>
+    <script src="js/widgets/productivity/pomodoro-widget.js"></script>
+    <script src="js/widgets/productivity/habit-tracker-widget.js"></script>
+    <script src="js/widgets/productivity/quick-notes-widget.js"></script>
+    <script src="js/widgets/health/water-tracker-widget.js"></script>
+    <script src="js/widgets/health/mood-tracker-widget.js"></script>
+    <script src="js/widgets/finance/expense-tracker-widget.js"></script>
+    <script src="js/widgets/finance/crypto-portfolio-widget.js"></script>
+    <script src="js/widgets/learning/flashcards-widget.js"></script>
+    <script src="js/widgets/social/contact-reminder-widget.js"></script>
+    <script src="js/widgets/smart-home/device-control-widget.js"></script>
+    <script src="js/widgets.js"></script>
+</body>
+</html>

@@ -28,7 +28,9 @@ app.get('/', (req, res) => {
 app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
-
+app.get('/chat.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'chat.html'));
+});
 app.get('/dashboard.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
@@ -55,6 +57,14 @@ app.get('/api/health', async (req, res) => {
 });
 
 // API Routes
+
+// Chat Model für Referenz laden
+try {
+    require('./src/models/Chat');
+    console.log('✅ Chat model loaded successfully');
+} catch (error) {
+    console.log('⚠️ Chat model not loaded:', error.message);
+}
 try {
     const authRoutes = require('./src/routes/auth');
     app.use('/api/auth', authRoutes);
