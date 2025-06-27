@@ -1,243 +1,400 @@
 const mongoose = require('mongoose');
 
-// ✅ FORCE CLEAR CACHE
-try {
-    mongoose.deleteModel('Profile');
-} catch (e) {
-    // Model doesn't exist yet, that's fine
-}
-
-const ProfileSchema = new mongoose.Schema({
+const profileSchema = new mongoose.Schema({
+    // Reference to the user who owns this profile
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: [true, 'User ID ist erforderlich'],
+        index: true
     },
+
+    // Basic profile information
     name: {
         type: String,
-        required: true,
-        trim: true
+        required: [true, 'Profilname ist erforderlich'],
+        trim: true,
+        maxlength: [100, 'Profilname darf maximal 100 Zeichen lang sein']
     },
     category: {
         type: String,
-        required: true,
-        trim: true,
-        // ✅ FLEXIBEL: Keine festen Kategorien mehr!
-        validate: {
-            validator: function(v) {
-                return v && v.length > 0 && v.length <= 50;
-            },
-            message: 'Kategorie muss zwischen 1 und 50 Zeichen haben'
+        required: [true, 'Kategorie ist erforderlich'],
+        enum: [
+            'arbeit', 'work', 
+            'sport', 'fitness', 
+            'kochen', 'cooking', 
+            'reisen', 'travel', 
+            'lernen', 'learning', 
+            'gesundheit', 'health', 
+            'hobby', 
+            'familie', 'family', 
+            'finanzen', 'finance',
+            'technologie', 'tech',
+            'kreativ', 'creative',
+            'general', 'allgemein'
+        ],
+        default: 'general'
+    },
+    description: {
+        type: String,
+        maxlength: [500, 'Beschreibung darf maximal 500 Zeichen lang sein'],
+        default: ''
+    },
+
+    // Profile data collected through interviews
+    profileData: {
+        goals: [{
+            type: String,
+            trim: true
+        }],
+        preferences: [{
+            type: String,
+            trim: true
+        }],
+        challenges: [{
+            type: String,
+            trim: true
+        }],
+        experience: {
+            type: String,
+            enum: ['anfaenger', 'beginner', 'fortgeschritten', 'intermediate', 'experte', 'expert', 'profi', 'professional'],
+            default: 'anfaenger'
+        },
+        frequency: {
+            type: String,
+            enum: ['taeglich', 'daily', 'woechentlich', 'weekly', 'monatlich', 'monthly', 'selten', 'rarely', 'unregelmaessig', 'irregular'],
+            default: 'woechentlich'
+        },
+        notes: {
+            type: String,
+            maxlength: [1000, 'Notizen dürfen maximal 1000 Zeichen lang sein'],
+            default: ''
         }
     },
+
+    // AI personality and behavior settings
     personality: {
-        type: { 
-            type: String, 
-            default: 'assistant',
-            enum: ['coach', 'analyst', 'creative', 'mentor', 'friend', 'expert', 'assistant']
-        },
         traits: [{
-            name: String, // 'motivational', 'analytical', 'empathetic', etc.
-            strength: { type: Number, min: 0, max: 1 } // 0.0 to 1.0
+            trait: String,
+            strength: {
+                type: Number,
+                min: 0,
+                max: 1,
+                default: 0.5
+            }
         }],
         communicationStyle: {
-            formality: { type: Number, default: 0.5 }, // 0=casual, 1=formal
-            enthusiasm: { type: Number, default: 0.7 }, // 0=reserved, 1=enthusiastic  
-            directness: { type: Number, default: 0.6 }, // 0=indirect, 1=direct
-            supportiveness: { type: Number, default: 0.8 } // 0=challenging, 1=supportive
+            type: String,
+            enum: ['formal', 'casual', 'friendly', 'professional', 'motivational', 'supportive'],
+            default: 'friendly'
+        },
+        responseLength: {
+            type: String,
+            enum: ['kurz', 'short', 'mittel', 'medium', 'lang', 'long', 'detailliert', 'detailed'],
+            default: 'mittel'
+        },
+        expertise: [{
+            area: String,
+            level: {
+                type: Number,
+                min: 0,
+                max: 1,
+                default: 0.5
+            }
+        }],
+        learningStyle: {
+            type: String,
+            enum: ['visual', 'auditiv', 'kinesthetic', 'reading', 'adaptive'],
+            default: 'adaptive'
         },
         evolutionHistory: [{
-            date: { type: Date, default: Date.now },
+            date: {
+                type: Date,
+                default: Date.now
+            },
             change: String,
             reason: String
         }]
     },
-    profileData: {
-        goals: [String],
-        preferences: [String],
-        challenges: [String],
-        experience: String,
-        frequency: String,
-        notes: String,
-        // ✅ NEU: Dynamische Eigenschaften für verschiedene Profile-Typen
-        customFields: [{
-            key: String,
-            value: String,
-            type: { type: String, default: 'text' } // 'text', 'number', 'list'
-        }]
-    },
-    memories: [{
-        type: { 
-            type: String,
-            enum: ['conversation', 'achievement', 'preference', 'goal', 'concern', 'insight', 'update']
-        },
-        content: String,
-        context: String,
-        importance: { type: Number, default: 0.5 }, // 0-1 scale
-        emotional_tone: String, // 'positive', 'negative', 'neutral'
-        createdAt: { type: Date, default: Date.now },
-        lastReferenced: { type: Date, default: Date.now },
-        referenceCount: { type: Number, default: 0 }
-    }],
-    conversationHistory: [{
-        role: { type: String, enum: ['user', 'assistant'] },
-        content: String,
-        timestamp: { type: Date, default: Date.now },
-        mood: String, // detected user mood
-        topics: [String], // extracted topics
-        memoryCreated: Boolean // whether this created a memory
-    }],
-    adaptations: {
-        preferredResponseLength: { type: String, default: 'medium' }, // short, medium, long
-        preferredExamples: { type: Boolean, default: true },
-        preferredTone: { type: String, default: 'friendly' },
-        learningFromFeedback: [{
-            feedback: String,
-            context: String,
-            adaptation: String,
-            date: { type: Date, default: Date.now }
-        }]
-    },
+
+    // Profile statistics and metrics
     stats: {
-        totalConversations: { type: Number, default: 0 },
-        totalMemories: { type: Number, default: 0 },
-        avgSessionLength: { type: Number, default: 0 },
-        lastUsed: { type: Date, default: Date.now },
-        userSatisfaction: { type: Number, default: 0.5 }, // 0-1 based on feedback
-        personalityEvolutions: { type: Number, default: 0 }
+        totalConversations: {
+            type: Number,
+            default: 0
+        },
+        totalMessages: {
+            type: Number,
+            default: 0
+        },
+        avgSessionLength: {
+            type: Number,
+            default: 0
+        },
+        lastUsed: {
+            type: Date,
+            default: Date.now
+        },
+        totalMemories: {
+            type: Number,
+            default: 0
+        },
+        userSatisfaction: {
+            type: Number,
+            min: 0,
+            max: 1,
+            default: 0.5
+        },
+        personalityEvolutions: {
+            type: Number,
+            default: 0
+        },
+        successfulInteractions: {
+            type: Number,
+            default: 0
+        },
+        helpfulResponsesCount: {
+            type: Number,
+            default: 0
+        }
+    },
+
+    // Learning and memory system
+    memories: [{
+        type: {
+            type: String,
+            enum: ['preference', 'fact', 'goal', 'feedback', 'context', 'pattern'],
+            required: true
+        },
+        content: {
+            type: String,
+            required: true,
+            maxlength: [500, 'Memory content darf maximal 500 Zeichen lang sein']
+        },
+        importance: {
+            type: Number,
+            min: 0,
+            max: 1,
+            default: 0.5
+        },
+        timestamp: {
+            type: Date,
+            default: Date.now
+        },
+        source: {
+            type: String,
+            enum: ['conversation', 'interview', 'feedback', 'analysis'],
+            default: 'conversation'
+        },
+        verified: {
+            type: Boolean,
+            default: false
+        }
+    }],
+
+    // Profile status and settings
+    isActive: {
+        type: Boolean,
+        default: true
+    },
+    isPublic: {
+        type: Boolean,
+        default: false
+    },
+    tags: [{
+        type: String,
+        trim: true,
+        lowercase: true
+    }],
+
+    // Advanced settings
+    settings: {
+        autoLearn: {
+            type: Boolean,
+            default: true
+        },
+        personalityEvolution: {
+            type: Boolean,
+            default: true
+        },
+        memoryRetention: {
+            type: Number,
+            min: 7,
+            max: 365,
+            default: 90 // days
+        },
+        contextAwareness: {
+            type: Boolean,
+            default: true
+        },
+        proactiveHelp: {
+            type: Boolean,
+            default: false
+        }
     }
+
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'profiles'
 });
 
-// Index for efficient queries
-ProfileSchema.index({ userId: 1, name: 1 });
-ProfileSchema.index({ userId: 1, lastUsed: -1 });
-ProfileSchema.index({ userId: 1, category: 1 });
+// Indexes for better query performance
+profileSchema.index({ userId: 1, name: 1 });
+profileSchema.index({ category: 1 });
+profileSchema.index({ 'stats.lastUsed': -1 });
+profileSchema.index({ isActive: 1 });
+profileSchema.index({ userId: 1, isActive: 1 });
 
-// Method to add memory
-ProfileSchema.methods.addMemory = function(type, content, context, importance = 0.5) {
+// Virtual for calculating activity score
+profileSchema.virtual('activityScore').get(function() {
+    const daysSinceCreation = Math.max(1, (Date.now() - this.createdAt) / (1000 * 60 * 60 * 24));
+    const messageFrequency = this.stats.totalMessages / daysSinceCreation;
+    return Math.min(1, messageFrequency / 2); // Normalize to 0-1 scale
+});
+
+// Virtual for health status
+profileSchema.virtual('healthStatus').get(function() {
+    const daysSinceLastUse = (Date.now() - this.stats.lastUsed) / (1000 * 60 * 60 * 24);
+    
+    if (daysSinceLastUse <= 1) return 'very_active';
+    if (daysSinceLastUse <= 7) return 'active';
+    if (daysSinceLastUse <= 30) return 'moderate';
+    if (daysSinceLastUse <= 90) return 'inactive';
+    return 'dormant';
+});
+
+// Ensure virtual fields are serialized
+profileSchema.set('toJSON', { virtuals: true });
+
+// Pre-save middleware
+profileSchema.pre('save', function(next) {
+    // Update parent user's profile count
+    if (this.isNew) {
+        mongoose.model('User').findByIdAndUpdate(
+            this.userId,
+            { $inc: { 'stats.totalProfiles': 1 } }
+        ).exec().catch(console.error);
+    }
+    
+    // Clean up old memories if memory retention limit is reached
+    if (this.memories.length > 100) {
+        // Keep only the most recent and important memories
+        this.memories = this.memories
+            .sort((a, b) => {
+                // Sort by importance first, then by timestamp
+                const importanceDiff = b.importance - a.importance;
+                if (Math.abs(importanceDiff) < 0.1) {
+                    return b.timestamp - a.timestamp;
+                }
+                return importanceDiff;
+            })
+            .slice(0, 80); // Keep top 80 memories
+    }
+    
+    next();
+});
+
+// Instance methods
+profileSchema.methods.addMemory = function(type, content, importance = 0.5, source = 'conversation') {
     this.memories.push({
         type,
         content,
-        context,
         importance,
-        emotional_tone: 'neutral'
+        source,
+        timestamp: new Date()
     });
+    
     this.stats.totalMemories = this.memories.length;
     return this.save();
 };
 
-// Method to evolve personality based on interactions
-ProfileSchema.methods.evolvePersonality = function(feedback, context) {
-    // Simple personality evolution logic
+profileSchema.methods.updateStats = function(conversationLength = 1, messageCount = 1) {
+    this.stats.totalConversations += 1;
+    this.stats.totalMessages += messageCount;
+    this.stats.lastUsed = new Date();
+    
+    // Update average session length
+    const totalSessions = this.stats.totalConversations;
+    this.stats.avgSessionLength = ((this.stats.avgSessionLength * (totalSessions - 1)) + conversationLength) / totalSessions;
+    
+    return this.save();
+};
+
+profileSchema.methods.evolvePersonality = function(feedback, reason) {
     this.personality.evolutionHistory.push({
-        change: `Adapted based on user feedback: ${feedback}`,
-        reason: context
+        date: new Date(),
+        change: feedback,
+        reason: reason
     });
+    
     this.stats.personalityEvolutions += 1;
     return this.save();
 };
 
-// ✅ NEU: Method to update profile from conversation
-ProfileSchema.methods.updateFromConversation = function(message, aiResponse) {
-    // Detect new goals, preferences, challenges from conversation
-    const lowerMessage = message.toLowerCase();
+profileSchema.methods.getRecentMemories = function(days = 7, limit = 10) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
     
-    // Simple keyword detection (kann später mit NLP verbessert werden)
-    const goalKeywords = ['ziel', 'erreichen', 'schaffen', 'möchte', 'will'];
-    const preferenceKeywords = ['mag', 'liebe', 'bevorzuge', 'gerne'];
-    const challengeKeywords = ['schwierig', 'problem', 'herausforderung', 'schwer'];
-    
-    if (goalKeywords.some(keyword => lowerMessage.includes(keyword))) {
-        // Extract potential goal and add if not already present
-        const goal = message.substring(0, 100); // Simplified extraction
-        if (!this.profileData.goals.includes(goal)) {
-            this.profileData.goals.push(goal);
-            this.addMemory('goal', goal, 'Extracted from conversation');
-        }
-    }
-    
-    if (preferenceKeywords.some(keyword => lowerMessage.includes(keyword))) {
-        const preference = message.substring(0, 100);
-        if (!this.profileData.preferences.includes(preference)) {
-            this.profileData.preferences.push(preference);
-            this.addMemory('preference', preference, 'Extracted from conversation');
-        }
-    }
-    
-    if (challengeKeywords.some(keyword => lowerMessage.includes(keyword))) {
-        const challenge = message.substring(0, 100);
-        if (!this.profileData.challenges.includes(challenge)) {
-            this.profileData.challenges.push(challenge);
-            this.addMemory('concern', challenge, 'Extracted from conversation');
-        }
-    }
-    
-    return this.save();
-};
-
-// Method to get relevant memories
-ProfileSchema.methods.getRelevantMemories = function(query, limit = 5) {
-    // Simple relevance scoring (can be enhanced with vector similarity later)
     return this.memories
-        .filter(memory => 
-            memory.content.toLowerCase().includes(query.toLowerCase()) ||
-            memory.context.toLowerCase().includes(query.toLowerCase())
-        )
-        .sort((a, b) => {
-            // Score by importance, recency, and reference count
-            const scoreA = a.importance * 0.4 + 
-                          (Date.now() - a.createdAt) / (1000 * 60 * 60 * 24) * 0.3 + 
-                          a.referenceCount * 0.3;
-            const scoreB = b.importance * 0.4 + 
-                          (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24) * 0.3 + 
-                          b.referenceCount * 0.3;
-            return scoreB - scoreA;
-        })
+        .filter(memory => memory.timestamp >= cutoffDate)
+        .sort((a, b) => b.importance - a.importance)
         .slice(0, limit);
 };
 
-// ✅ NEU: Method to get contextual questions based on category
-ProfileSchema.methods.getContextualQuestions = function() {
-    const category = this.category.toLowerCase();
-    
-    const questionSets = {
-        'sport': [
-            'Welche Sportart machst du am liebsten?',
-            'Wie oft trainierst du normalerweise?',
-            'Was ist dein größtes Ziel beim Sport?',
-            'Was ist deine größte Herausforderung beim Training?'
-        ],
-        'kochen': [
-            'Welche Art von Küche magst du am liebsten?',
-            'Kochst du täglich oder eher am Wochenende?',
-            'Was sind deine Lieblings-Gerichte?',
-            'Was möchtest du beim Kochen noch lernen?'
-        ],
-        'arbeit': [
-            'In welchem Bereich arbeitest du?',
-            'Was sind deine beruflichen Ziele?',
-            'Was motiviert dich bei der Arbeit am meisten?',
-            'Welche beruflichen Herausforderungen beschäftigen dich?'
-        ],
-        'lernen': [
-            'Was möchtest du lernen oder studieren?',
-            'Wie lernst du am effektivsten?',
-            'Was sind deine Lernziele?',
-            'Was macht dir beim Lernen Schwierigkeiten?'
-        ]
-    };
-    
-    // Default questions for unknown categories
-    const defaultQuestions = [
-        `Was machst du gerne im Bereich ${this.category}?`,
-        `Wie oft beschäftigst du dich mit ${this.category}?`,
-        `Was sind deine Ziele in Bezug auf ${this.category}?`,
-        `Was ist deine größte Herausforderung bei ${this.category}?`
-    ];
-    
-    return questionSets[category] || defaultQuestions;
+profileSchema.methods.getTopMemoriesByType = function(type, limit = 5) {
+    return this.memories
+        .filter(memory => memory.type === type)
+        .sort((a, b) => b.importance - a.importance)
+        .slice(0, limit);
 };
 
-module.exports = mongoose.model('Profile', ProfileSchema);
+// Static methods
+profileSchema.statics.findByUserAndCategory = function(userId, category) {
+    return this.find({ userId, category, isActive: true });
+};
+
+profileSchema.statics.getActiveProfiles = function(userId) {
+    return this.find({ 
+        userId, 
+        isActive: true 
+    }).sort({ 'stats.lastUsed': -1 });
+};
+
+profileSchema.statics.getProfileStatistics = function(userId) {
+    return this.aggregate([
+        { $match: { userId: mongoose.Types.ObjectId(userId) } },
+        {
+            $group: {
+                _id: null,
+                totalProfiles: { $sum: 1 },
+                activeProfiles: {
+                    $sum: {
+                        $cond: [{ $eq: ['$isActive', true] }, 1, 0]
+                    }
+                },
+                totalConversations: { $sum: '$stats.totalConversations' },
+                totalMessages: { $sum: '$stats.totalMessages' },
+                avgSatisfaction: { $avg: '$stats.userSatisfaction' },
+                categories: { $addToSet: '$category' }
+            }
+        }
+    ]);
+};
+
+profileSchema.statics.getTopCategories = function() {
+    return this.aggregate([
+        { $match: { isActive: true } },
+        {
+            $group: {
+                _id: '$category',
+                count: { $sum: 1 },
+                avgSatisfaction: { $avg: '$stats.userSatisfaction' },
+                totalMessages: { $sum: '$stats.totalMessages' }
+            }
+        },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+    ]);
+};
+
+module.exports = mongoose.model('Profile', profileSchema);

@@ -4,6 +4,9 @@ const router = express.Router();
 const User = require('../models/User');
 const database = require('../config/database');
 
+// Fallback-Speicher für den Fall, dass MongoDB nicht verfügbar ist
+const fallbackUsers = [];
+
 // Register Route
 router.post('/register', async (req, res) => {
     try {
@@ -120,7 +123,11 @@ router.post('/login', async (req, res) => {
         }
 
         // Letzten Login aktualisieren
-        user.stats.lastActive = new Date();
+        if (user.stats) {
+            user.stats.lastActive = new Date();
+        } else {
+            user.stats = { lastActive: new Date() };
+        }
         await user.save();
 
         console.log('Login successful for:', email);
@@ -145,13 +152,11 @@ router.post('/login', async (req, res) => {
 });
 
 // Fallback-Funktionen für den Fall, dass MongoDB nicht verbunden ist
-const fallbackUsers = [];
-
 function handleRegistrationFallback(req, res) {
     const { firstName, lastName, email, password, acceptNewsletter } = req.body;
     
     // Prüfen ob User bereits existiert
-    const existingUser = fallbackUsers.find(u => u.email === email);
+    const existingUser = fallbackUsers.find(u => u.email === email.toLowerCase());
     if (existingUser) {
         return res.status(409).json({ 
             error: 'Ein Benutzer mit dieser E-Mail existiert bereits' 
@@ -164,7 +169,7 @@ function handleRegistrationFallback(req, res) {
         firstName,
         lastName,
         name: `${firstName} ${lastName}`,
-        email,
+        email: email.toLowerCase(),
         password, // In echter Anwendung: gehashed speichern!
         acceptNewsletter: acceptNewsletter || false,
         createdAt: new Date()
@@ -193,7 +198,7 @@ function handleLoginFallback(req, res) {
     const { email, password } = req.body;
     
     // User suchen (Fallback-Array)
-    const user = fallbackUsers.find(u => u.email === email && u.password === password);
+    const user = fallbackUsers.find(u => u.email === email.toLowerCase() && u.password === password);
 
     if (!user) {
         return res.status(401).json({ 

@@ -1,710 +1,175 @@
+/**
+ * 🏠 DASHBOARD MANAGEMENT
+ * Zentrale Steuerung für das Dashboard
+ * 
+ * SEPARATION OF CONCERNS:
+ * - Navigation zwischen Sektionen
+ * - Profile Management
+ * - User Authentication
+ * - Modal Management
+ * - Search & Filter Functionality
+ */
+
 class DashboardManager {
     constructor() {
         this.currentSection = 'home';
         this.profiles = [];
-        this.currentProfile = null;
-        this.currentProfileForChat = null;
-        this.conversationHistory = [];
-        this.profileConversationHistory = [];
+        this.filteredProfiles = [];
         this.selectedProfiles = new Set();
-        this.sortOrder = 'updated';
-        this.filterCategory = 'all';
+        this.currentUser = null;
         this.searchQuery = '';
-        this.init();
+        this.currentSort = 'lastUsed';
+        this.currentFilter = 'all';
+
+        this.initializeApp();
     }
 
-    init() {
-        this.checkAuth();
-        this.loadUserData();
-        this.bindEvents();
-        this.initializeComponents();
-        this.setupAdvancedFeatures();
-    }
+    // ========================================
+    // INITIALIZATION
+    // ========================================
 
-    checkAuth() {
-        const isLoggedIn = localStorage.getItem('allKiLoggedIn');
-        if (isLoggedIn !== 'true') {
-            window.location.href = '/login.html';
-            return;
-        }
-    }
-
-    loadUserData() {
-        const userName = localStorage.getItem('allKiUserName');
-        const userEmail = localStorage.getItem('allKiUserEmail');
-        
-        if (userName) {
-            document.getElementById('userGreeting').textContent = `Hallo, ${userName}!`;
-            document.getElementById('userAvatar').innerHTML = `<span>${userName.charAt(0).toUpperCase()}</span>`;
-        } else if (userEmail) {
-            document.getElementById('userGreeting').textContent = `Hallo, ${userEmail}!`;
-            document.getElementById('userAvatar').innerHTML = `<span>${userEmail.charAt(0).toUpperCase()}</span>`;
-        }
-    }
-
-    getAuthHeaders() {
-        return {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('allKiAuthToken')}`,
-            'X-User-Email': localStorage.getItem('allKiUserEmail')
-        };
-    }
-
-    // ERWEITERTE PROFILE-VERWALTUNG
-    async loadProfiles() {
+    async initializeApp() {
         try {
-            this.showLoading();
+            // Check authentication
+            await this.checkAuthentication();
             
-            const response = await fetch('/api/profiles/enhanced', {
-                method: 'GET',
-                headers: this.getAuthHeaders()
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.profiles = data.profiles || [];
-                this.updateDashboardSummary(data.summary);
-                this.updateProfileTabs();
-                this.renderProfilesSection();
-                console.log('📊 Enhanced profiles loaded:', this.profiles.length);
-            } else {
-                console.log('No profiles found or error loading profiles');
-                this.profiles = [];
-            }
+            // Initialize event listeners
+            this.initializeEventListeners();
+            
+            // Load initial data
+            await this.loadUserData();
+            
+            // Initialize sections
+            this.initializeSections();
+            
+            // Set initial section
+            this.switchSection('home');
+            
+            console.log('✅ Dashboard initialized successfully');
         } catch (error) {
-            console.error('Error loading profiles:', error);
-            this.profiles = [];
-            this.showToast('Fehler beim Laden der Profile', 'error');
-        } finally {
-            this.hideLoading();
+            console.error('❌ Dashboard initialization failed:', error);
+            this.handleAuthenticationError();
         }
     }
 
-    updateDashboardSummary(summary) {
-        if (!summary) return;
+    async checkAuthentication() {
+        const token = localStorage.getItem('allKiAuthToken');
+        const email = localStorage.getItem('allKiUserEmail');
+        
+        if (!token || !email) {
+            throw new Error('Not authenticated');
+        }
 
-        // Update overview widget with real statistics
-        const overviewList = document.querySelector('.overview-list');
-        if (overviewList) {
-            overviewList.innerHTML = `
-                <li>
-                    <span class="overview-icon">👤</span>
-                    <span>${summary.totalProfiles} Profile erstellt</span>
-                </li>
-                <li>
-                    <span class="overview-icon">💬</span>
-                    <span>${summary.totalConversations} Gespräche geführt</span>
-                </li>
-                <li>
-                    <span class="overview-icon">📝</span>
-                    <span>${summary.totalMessages} Nachrichten ausgetauscht</span>
-                </li>
-                <li>
-                    <span class="overview-icon">⚡</span>
-                    <span>${summary.activeProfiles} aktive Profile</span>
-                </li>
-            `;
-        }
-    }
-
-    renderProfilesSection() {
-        const container = document.querySelector('#profiles-section .profiles-container');
-        if (!container) return;
-        
-        // Clear existing content except add button
-        const addProfileBtn = container.querySelector('.add-profile');
-        container.innerHTML = '';
-        
-        // Add profile management controls
-        this.addProfileControls(container);
-        
-        // Filter and sort profiles
-        const filteredProfiles = this.getFilteredAndSortedProfiles();
-        
-        if (filteredProfiles.length === 0) {
-            this.addEmptyState(container);
-        } else {
-            // Add bulk selection controls if profiles selected
-            if (this.selectedProfiles.size > 0) {
-                this.addBulkControls(container);
-            }
-            
-            // Add profile cards
-            filteredProfiles.forEach(profile => {
-                this.addEnhancedProfileCard(profile, container);
-            });
-        }
-        
-        // Add the "Add Profile" button back
-        if (addProfileBtn) {
-            container.appendChild(addProfileBtn);
-        }
-    }
-
-    addProfileControls(container) {
-        const controls = document.createElement('div');
-        controls.className = 'profile-controls';
-        controls.innerHTML = `
-            <div class="profile-search">
-                <input type="text" placeholder="Profile durchsuchen..." 
-                       id="profileSearchInput" value="${this.searchQuery}">
-                <button class="search-clear-btn" id="clearSearchBtn" 
-                        style="display: ${this.searchQuery ? 'block' : 'none'}">✕</button>
-            </div>
-            <div class="profile-filters">
-                <select id="categoryFilter">
-                    <option value="all">Alle Kategorien</option>
-                    <option value="work">Arbeit</option>
-                    <option value="health">Gesundheit</option>
-                    <option value="learning">Lernen</option>
-                    <option value="creativity">Kreativität</option>
-                    <option value="relationships">Beziehungen</option>
-                    <option value="finance">Finanzen</option>
-                    <option value="general">Allgemein</option>
-                </select>
-                <select id="sortOrder">
-                    <option value="updated">Zuletzt verwendet</option>
-                    <option value="created">Erstellungsdatum</option>
-                    <option value="name">Name A-Z</option>
-                    <option value="activity">Aktivität</option>
-                    <option value="messages">Nachrichten</option>
-                </select>
-            </div>
-            <div class="profile-stats">
-                <span class="stat">
-                    <strong>${this.profiles.length}</strong> Profile
-                </span>
-                <span class="stat">
-                    <strong>${this.profiles.filter(p => p.health && p.health.status === 'active').length}</strong> aktiv
-                </span>
-            </div>
-        `;
-        
-        container.appendChild(controls);
-        this.bindProfileControlEvents();
-    }
-
-    bindProfileControlEvents() {
-        // Search functionality
-        const searchInput = document.getElementById('profileSearchInput');
-        const clearBtn = document.getElementById('clearSearchBtn');
-        
-        if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                this.searchQuery = e.target.value;
-                if (clearBtn) clearBtn.style.display = this.searchQuery ? 'block' : 'none';
-                this.renderProfilesSection();
-            });
-        }
-        
-        if (clearBtn) {
-            clearBtn.addEventListener('click', () => {
-                this.searchQuery = '';
-                if (searchInput) searchInput.value = '';
-                clearBtn.style.display = 'none';
-                this.renderProfilesSection();
-            });
-        }
-        
-        // Filter controls
-        const categoryFilter = document.getElementById('categoryFilter');
-        const sortOrder = document.getElementById('sortOrder');
-        
-        if (categoryFilter) {
-            categoryFilter.value = this.filterCategory;
-            categoryFilter.addEventListener('change', (e) => {
-                this.filterCategory = e.target.value;
-                this.renderProfilesSection();
-            });
-        }
-        
-        if (sortOrder) {
-            sortOrder.value = this.sortOrder;
-            sortOrder.addEventListener('change', (e) => {
-                this.sortOrder = e.target.value;
-                this.renderProfilesSection();
-            });
-        }
-    }
-
-    getFilteredAndSortedProfiles() {
-        let filtered = [...this.profiles];
-        
-        // Apply search filter
-        if (this.searchQuery.trim()) {
-            const query = this.searchQuery.toLowerCase();
-            filtered = filtered.filter(profile => 
-                profile.name.toLowerCase().includes(query) ||
-                profile.category.toLowerCase().includes(query) ||
-                (profile.profileData.goals && profile.profileData.goals.some(goal => 
-                    goal.toLowerCase().includes(query)
-                )) ||
-                (profile.profileData.preferences && profile.profileData.preferences.some(pref => 
-                    pref.toLowerCase().includes(query)
-                ))
-            );
-        }
-        
-        // Apply category filter
-        if (this.filterCategory !== 'all') {
-            filtered = filtered.filter(profile => profile.category === this.filterCategory);
-        }
-        
-        // Apply sorting
-        filtered.sort((a, b) => {
-            switch (this.sortOrder) {
-                case 'name':
-                    return a.name.localeCompare(b.name);
-                case 'created':
-                    return new Date(b.createdAt) - new Date(a.createdAt);
-                case 'activity':
-                    return (b.stats && b.stats.activityScore || 0) - (a.stats && a.stats.activityScore || 0);
-                case 'messages':
-                    return (b.stats && b.stats.totalMessages || 0) - (a.stats && a.stats.totalMessages || 0);
-                case 'updated':
-                default:
-                    return new Date(b.updatedAt) - new Date(a.updatedAt);
-            }
-        });
-        
-        return filtered;
-    }
-
-    addEnhancedProfileCard(profile, container) {
-        const profileCard = document.createElement('div');
-        profileCard.className = `profile-card enhanced ${this.selectedProfiles.has(profile._id) ? 'selected' : ''}`;
-        profileCard.setAttribute('data-profile-id', profile._id);
-        profileCard.setAttribute('data-category', profile.category);
-        
-        const categoryIcons = {
-            'work': '💼', 'health': '🏥', 'learning': '📚', 'creativity': '🎨',
-            'relationships': '👥', 'finance': '💰', 'general': '🎯'
-        };
-        
-        const icon = categoryIcons[profile.category] || '🎯';
-        const activityClass = profile.health && profile.health.status === 'active' ? 'active' : 'inactive';
-        const engagementClass = profile.health && profile.health.engagement || 'low';
-        
-        // Calculate time since last activity
-        const lastActivity = profile.health && profile.health.lastUsed ? 
-            this.getRelativeTime(new Date(profile.health.lastUsed)) : 'Nie verwendet';
-            
-        // Get top goals (max 2)
-        const topGoals = profile.profileData.goals && profile.profileData.goals.slice(0, 2) || [];
-        
-        // Get insights preview
-        const topInsight = profile.insights && profile.insights[0];
-        
-        profileCard.innerHTML = `
-            <div class="profile-header">
-                <div class="profile-selection">
-                    <input type="checkbox" class="profile-checkbox" 
-                           ${this.selectedProfiles.has(profile._id) ? 'checked' : ''}
-                           onchange="dashboardManager.toggleProfileSelection('${profile._id}', this.checked)">
-                </div>
-                <div class="profile-status-indicator ${activityClass}"></div>
-                <div class="profile-icon">${icon}</div>
-                <div class="profile-actions-menu">
-                    <button class="menu-trigger" onclick="dashboardManager.showProfileMenu(event, '${profile._id}')">⋯</button>
-                </div>
-            </div>
-            
-            <div class="profile-main">
-                <h3 class="profile-name" title="${profile.name}">${profile.name}</h3>
-                <p class="profile-category">${this.getCategoryName(profile.category)}</p>
-                
-                <div class="profile-goals">
-                    ${topGoals.map(goal => `<span class="goal-tag">${goal}</span>`).join('')}
-                    ${profile.profileData.goals && profile.profileData.goals.length > 2 ? 
-                        `<span class="goal-more">+${profile.profileData.goals.length - 2} mehr</span>` : ''}
-                </div>
-                
-                ${topInsight ? `
-                    <div class="profile-insight">
-                        <span class="insight-icon">💡</span>
-                        <span class="insight-text">${topInsight.content.substring(0, 60)}...</span>
-                    </div>
-                ` : ''}
-            </div>
-            
-            <div class="profile-stats-grid">
-                <div class="stat-item">
-                    <span class="stat-value">${profile.stats && profile.stats.totalChats || 0}</span>
-                    <span class="stat-label">Chats</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-value">${profile.stats && profile.stats.totalMessages || 0}</span>
-                    <span class="stat-label">Nachrichten</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-value engagement-${engagementClass}">${this.getEngagementIcon(engagementClass)}</span>
-                    <span class="stat-label">Engagement</span>
-                </div>
-            </div>
-            
-            <div class="profile-footer">
-                <div class="profile-last-activity">
-                    <span class="activity-text">Zuletzt: ${lastActivity}</span>
-                </div>
-                <div class="profile-quick-actions">
-                    <button class="quick-action-btn primary" 
-                            onclick="event.stopPropagation(); dashboardManager.openProfileChatPage('${profile._id}')"
-                            title="Chat öffnen">
-                        💬
-                    </button>
-                    <button class="quick-action-btn secondary" 
-                            onclick="event.stopPropagation(); dashboardManager.showProfileDetails('${profile._id}')"
-                            title="Details anzeigen">
-                        📊
-                    </button>
-                    <button class="quick-action-btn secondary" 
-                            onclick="event.stopPropagation(); dashboardManager.editProfile('${profile._id}')"
-                            title="Bearbeiten">
-                        ✏️
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        // Add click handler for the entire card
-        profileCard.addEventListener('click', (e) => {
-            if (!e.target.closest('.profile-checkbox') && 
-                !e.target.closest('.quick-action-btn') && 
-                !e.target.closest('.menu-trigger')) {
-                this.openProfileChatPage(profile._id);
-            }
-        });
-        
-        container.appendChild(profileCard);
-    }
-
-    // PROFILE MANAGEMENT FUNCTIONS
-    toggleProfileSelection(profileId, isSelected) {
-        if (isSelected) {
-            this.selectedProfiles.add(profileId);
-        } else {
-            this.selectedProfiles.delete(profileId);
-        }
-        
-        // Update visual selection
-        const card = document.querySelector(`[data-profile-id="${profileId}"]`);
-        if (card) {
-            card.classList.toggle('selected', isSelected);
-        }
-        
-        // Update bulk controls
-        this.renderProfilesSection();
-    }
-
-    addBulkControls(container) {
-        const bulkControls = document.createElement('div');
-        bulkControls.className = 'bulk-controls';
-        bulkControls.innerHTML = `
-            <div class="bulk-info">
-                <span>${this.selectedProfiles.size} Profile ausgewählt</span>
-                <button class="bulk-clear" onclick="dashboardManager.clearSelection()">Auswahl aufheben</button>
-            </div>
-            <div class="bulk-actions">
-                <button class="bulk-action-btn" onclick="dashboardManager.bulkAction('archive')">
-                    📁 Archivieren
-                </button>
-                <button class="bulk-action-btn danger" onclick="dashboardManager.bulkAction('delete')">
-                    🗑️ Löschen
-                </button>
-                <select onchange="dashboardManager.bulkCategoryUpdate(this.value)">
-                    <option value="">Kategorie ändern...</option>
-                    <option value="work">Arbeit</option>
-                    <option value="health">Gesundheit</option>
-                    <option value="learning">Lernen</option>
-                    <option value="creativity">Kreativität</option>
-                    <option value="relationships">Beziehungen</option>
-                    <option value="finance">Finanzen</option>
-                    <option value="general">Allgemein</option>
-                </select>
-            </div>
-        `;
-        
-        container.appendChild(bulkControls);
-    }
-
-    async bulkAction(action) {
-        if (this.selectedProfiles.size === 0) return;
-        
-        const profileIds = Array.from(this.selectedProfiles);
-        const confirmMessage = action === 'delete' 
-            ? `Möchten Sie wirklich ${profileIds.length} Profile löschen? Diese Aktion kann nicht rückgängig gemacht werden.`
-            : `Möchten Sie ${profileIds.length} Profile ${action === 'archive' ? 'archivieren' : 'bearbeiten'}?`;
-        
-        if (!confirm(confirmMessage)) return;
-        
+        // Verify token with server
         try {
-            this.showLoading();
-            
-            const response = await fetch('/api/profiles/bulk-action', {
-                method: 'POST',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify({
-                    action: action,
-                    profileIds: profileIds
-                })
+            const response = await fetch('/api/auth/verify', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-User-Email': email
+                }
             });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                this.showToast(result.message, 'success');
-                this.clearSelection();
-                await this.loadProfiles();
-            } else {
-                this.showToast('Fehler bei der Bulk-Aktion', 'error');
+
+            if (!response.ok) {
+                throw new Error('Token invalid');
             }
-        } catch (error) {
-            console.error('Bulk action error:', error);
-            this.showToast('Verbindungsfehler', 'error');
-        } finally {
-            this.hideLoading();
-        }
-    }
 
-    clearSelection() {
-        this.selectedProfiles.clear();
-        document.querySelectorAll('.profile-checkbox').forEach(cb => cb.checked = false);
-        document.querySelectorAll('.profile-card').forEach(card => card.classList.remove('selected'));
-        this.renderProfilesSection();
-    }
-
-    addEmptyState(container) {
-        const emptyState = document.createElement('div');
-        emptyState.className = 'profiles-empty';
-        emptyState.innerHTML = `
-            <div class="empty-icon">📋</div>
-            <h3>Keine Profile gefunden</h3>
-            <p>Erstellen Sie Ihr erstes Profil, um mit Ihrem persönlichen KI-Assistenten zu beginnen.</p>
-            <button class="create-first-btn" onclick="dashboardManager.openProfileCreation()">
-                Erstes Profil erstellen
-            </button>
-        `;
-        container.appendChild(emptyState);
-    }
-
-    // PROFILE DETAILS MODAL
-    async showProfileDetails(profileId) {
-        try {
-            this.showLoading();
+            const userData = await response.json();
+            this.currentUser = userData.user;
             
-            const response = await fetch(`/api/profiles/${profileId}/details`, {
-                method: 'GET',
-                headers: this.getAuthHeaders()
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                this.openProfileDetailsModal(data);
-            } else {
-                this.showToast('Fehler beim Laden der Profildetails', 'error');
-            }
         } catch (error) {
-            console.error('Profile details error:', error);
-            this.showToast('Verbindungsfehler', 'error');
-        } finally {
-            this.hideLoading();
+            console.log('Token verification failed, continuing with stored data');
+            this.currentUser = {
+                email: email,
+                name: localStorage.getItem('allKiUserName') || 'Benutzer'
+            };
         }
     }
 
-    openProfileDetailsModal(data) {
-        const { profile, analysis, recommendations } = data;
-        
-        // Create or update modal
-        let modal = document.getElementById('profileDetailsModal');
-        if (!modal) {
-            modal = this.createProfileDetailsModal();
-        }
-        
-        // Update modal content with detailed analysis
-        const content = modal.querySelector('.modal-content');
-        content.innerHTML = `
-            <div class="modal-header">
-                <h3>📊 ${profile.name} - Detailanalyse</h3>
-                <button class="modal-close" onclick="dashboardManager.closeModal('profileDetailsModal')">✕</button>
-            </div>
-            <div class="profile-details-content">
-                <div class="details-grid">
-                    <div class="detail-section">
-                        <h4>💬 Gespräche</h4>
-                        <div class="stats-row">
-                            <div class="stat">
-                                <span class="value">${analysis.conversation.totalChats}</span>
-                                <span class="label">Chats</span>
-                            </div>
-                            <div class="stat">
-                                <span class="value">${analysis.conversation.totalMessages}</span>
-                                <span class="label">Nachrichten</span>
-                            </div>
-                            <div class="stat">
-                                <span class="value">${Math.round(analysis.conversation.avgSessionLength)}</span>
-                                <span class="label">Ø Session</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="detail-section">
-                        <h4>🧠 Erinnerungen</h4>
-                        <div class="stats-row">
-                            <div class="stat">
-                                <span class="value">${analysis.memory.totalMemories}</span>
-                                <span class="label">Gesamt</span>
-                            </div>
-                        </div>
-                        
-                        ${analysis.memory.importantMemories.length > 0 ? `
-                        <div class="important-memories">
-                            <h5>Wichtige Erinnerungen:</h5>
-                            ${analysis.memory.importantMemories.slice(0, 3)
-                                .map(memory => `<div class="memory-item">
-                                    <span class="memory-content">${memory.content}</span>
-                                    <span class="memory-importance">${Math.round(memory.importance * 100)}%</span>
-                                </div>`).join('')}
-                        </div>
-                        ` : ''}
-                    </div>
-                    
-                    <div class="detail-section">
-                        <h4>🎯 Ziele & Fortschritt</h4>
-                        <div class="goals-progress">
-                            ${analysis.goals.map(goal => `
-                                <div class="goal-progress">
-                                    <span class="goal-name">${goal.goal}</span>
-                                    <div class="goal-mentions">
-                                        <span class="mentions-count">${goal.mentions}</span>
-                                        <span class="mentions-label">Erwähnungen</span>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                    
-                    <div class="detail-section">
-                        <h4>💡 Empfehlungen</h4>
-                        <div class="recommendations">
-                            ${recommendations.map(rec => `
-                                <div class="recommendation ${rec.priority}">
-                                    <h5>${rec.title}</h5>
-                                    <p>${rec.description}</p>
-                                    <button class="rec-action" onclick="dashboardManager.executeRecommendation('${rec.action}', '${profile._id}')">
-                                        Umsetzen
-                                    </button>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        this.showModal('profileDetailsModal');
-    }
-
-    // UTILITY FUNCTIONS
-    getRelativeTime(date) {
-        const now = new Date();
-        const diff = now - date;
-        const minutes = Math.floor(diff / 60000);
-        const hours = Math.floor(diff / 3600000);
-        const days = Math.floor(diff / 86400000);
-        
-        if (minutes < 1) return 'Gerade eben';
-        if (minutes < 60) return `vor ${minutes}m`;
-        if (hours < 24) return `vor ${hours}h`;
-        if (days < 7) return `vor ${days}d`;
-        if (days < 30) return `vor ${Math.floor(days/7)}w`;
-        return `vor ${Math.floor(days/30)}mon`;
-    }
-
-    getEngagementIcon(level) {
-        const icons = {
-            'high': '🔥',
-            'medium': '⚡',
-            'low': '💤'
-        };
-        return icons[level] || '➖';
-    }
-
-    getCategoryName(category) {
-        const names = {
-            'work': 'Arbeit', 'health': 'Gesundheit', 'learning': 'Lernen',
-            'creativity': 'Kreativität', 'relationships': 'Beziehungen',
-            'finance': 'Finanzen', 'general': 'Allgemein'
-        };
-        return names[category] || 'Allgemein';
-    }
-
-    openProfileChatPage(profileId) {
-        window.location.href = `/chat.html?profile=${profileId}`;
-    }
-
-    // EXISTING METHODS (from original dashboard.js)
-    bindEvents() {
+    initializeEventListeners() {
         // Navigation
         document.querySelectorAll('.nav-link[data-section]').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                this.switchSection(link.dataset.section);
+                const section = link.dataset.section;
+                this.switchSection(section);
             });
         });
 
         // Logout
-        document.getElementById('logout-btn').addEventListener('click', (e) => {
+        document.getElementById('logout-btn')?.addEventListener('click', (e) => {
             e.preventDefault();
             this.handleLogout();
         });
 
-        // Quick Chat
-        document.getElementById('quickChatBtn').addEventListener('click', () => {
-            this.openQuickChat();
+        // Profile Search
+        document.getElementById('profileSearch')?.addEventListener('input', (e) => {
+            this.searchQuery = e.target.value.toLowerCase();
+            this.filterAndRenderProfiles();
         });
 
-        document.getElementById('quickChatInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.openQuickChat();
+        // Search Clear Button
+        document.getElementById('clearSearchBtn')?.addEventListener('click', () => {
+            document.getElementById('profileSearch').value = '';
+            this.searchQuery = '';
+            this.filterAndRenderProfiles();
+        });
+
+        // Profile Sort
+        document.getElementById('profileSort')?.addEventListener('change', (e) => {
+            this.currentSort = e.target.value;
+            this.filterAndRenderProfiles();
+        });
+
+        // Profile Filter
+        document.getElementById('profileFilter')?.addEventListener('change', (e) => {
+            this.currentFilter = e.target.value;
+            this.filterAndRenderProfiles();
+        });
+
+        // Bulk Actions
+        document.getElementById('bulkActionSelect')?.addEventListener('change', (e) => {
+            if (e.target.value && this.selectedProfiles.size > 0) {
+                this.handleBulkAction(e.target.value);
+                e.target.value = '';
             }
         });
 
-        // Profile Creation
-        document.getElementById('addProfileBtn').addEventListener('click', () => {
-            this.openProfileCreation();
+        // Select All Profiles
+        document.getElementById('selectAllProfiles')?.addEventListener('click', () => {
+            this.toggleSelectAllProfiles();
         });
 
-        document.getElementById('createProfileBtn').addEventListener('click', () => {
-            this.openProfileCreation();
+        // Create Profile
+        document.getElementById('createProfileBtn')?.addEventListener('click', () => {
+            this.showCreateProfileModal();
         });
 
-        // Modal overlay clicks
-        document.querySelectorAll('.modal-overlay').forEach(overlay => {
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) {
-                    this.closeModal(overlay.id);
-                }
-            });
+        // Keyboard shortcuts
+        this.initializeKeyboardShortcuts();
+
+        // Window events
+        window.addEventListener('beforeunload', () => {
+            this.saveCurrentState();
         });
     }
 
-    async initializeComponents() {
-        this.updateNavigation();
-        await this.loadProfiles();
-    }
-
-    setupAdvancedFeatures() {
-        // Setup keyboard shortcuts
+    initializeKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
+            // Skip if user is typing in input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+
+            // Ctrl/Cmd + shortcuts
             if (e.ctrlKey || e.metaKey) {
                 switch (e.key) {
-                    case 'f':
-                        e.preventDefault();
-                        document.getElementById('profileSearchInput')?.focus();
-                        break;
                     case 'n':
                         e.preventDefault();
-                        this.openProfileCreation();
+                        this.showCreateProfileModal();
+                        break;
+                    case 'f':
+                        e.preventDefault();
+                        document.getElementById('profileSearch')?.focus();
                         break;
                     case 'a':
                         if (this.currentSection === 'profiles') {
@@ -714,50 +179,569 @@ class DashboardManager {
                         break;
                 }
             }
+
+            // Number keys for section switching
+            if (e.key >= '1' && e.key <= '5' && !e.ctrlKey && !e.metaKey) {
+                const sections = ['home', 'profiles', 'calendar', 'email', 'widgets'];
+                const sectionIndex = parseInt(e.key) - 1;
+                if (sections[sectionIndex]) {
+                    this.switchSection(sections[sectionIndex]);
+                }
+            }
         });
     }
 
-    selectAllProfiles() {
-        const visibleProfiles = this.getFilteredAndSortedProfiles();
-        visibleProfiles.forEach(profile => {
-            this.selectedProfiles.add(profile._id);
-        });
-        this.renderProfilesSection();
+    initializeSections() {
+        // Home Section
+        this.initializeHomeSection();
+        
+        // Profiles Section
+        this.initializeProfilesSection();
+        
+        // Calendar Section
+        this.initializeCalendarSection();
+        
+        // Email Section
+        this.initializeEmailSection();
+        
+        // Widgets Section - handled by widgets.js
     }
+
+    // ========================================
+    // NAVIGATION & SECTIONS
+    // ========================================
 
     switchSection(sectionName) {
         // Update navigation
         document.querySelectorAll('.nav-link').forEach(link => {
             link.classList.remove('active');
         });
-        document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
+        
+        const activeLink = document.querySelector(`[data-section="${sectionName}"]`);
+        if (activeLink) {
+            activeLink.classList.add('active');
+        }
 
         // Update content
         document.querySelectorAll('.content-section').forEach(section => {
             section.classList.remove('active');
         });
-        document.getElementById(`${sectionName}-section`).classList.add('active');
+        
+        const targetSection = document.getElementById(`${sectionName}-section`);
+        if (targetSection) {
+            targetSection.classList.add('active');
+        }
 
         this.currentSection = sectionName;
 
-        // Load profiles when switching to profiles section
-        if (sectionName === 'profiles') {
-            this.renderProfilesSection();
+        // Load section-specific content
+        this.loadSectionContent(sectionName);
+
+        // Update URL without reload
+        const url = new URL(window.location);
+        url.searchParams.set('section', sectionName);
+        window.history.replaceState({}, '', url);
+    }
+
+    async loadSectionContent(sectionName) {
+        switch (sectionName) {
+            case 'home':
+                await this.loadHomeContent();
+                break;
+            case 'profiles':
+                await this.loadProfilesContent();
+                break;
+            case 'calendar':
+                await this.loadCalendarContent();
+                break;
+            case 'email':
+                await this.loadEmailContent();
+                break;
+            case 'widgets':
+                // Redirect to widgets page
+                window.location.href = 'widgets.html';
+                break;
         }
     }
 
-    updateNavigation() {
-        document.querySelectorAll('.nav-link').forEach(link => {
-            link.classList.remove('active');
-        });
-        
-        const activeLink = document.querySelector(`[data-section="${this.currentSection}"]`);
-        if (activeLink) {
-            activeLink.classList.add('active');
+    // ========================================
+    // HOME SECTION
+    // ========================================
+
+    initializeHomeSection() {
+        // Home section initialization
+    }
+
+    async loadHomeContent() {
+        try {
+            const welcomeMessage = document.getElementById('welcomeMessage');
+            if (welcomeMessage && this.currentUser) {
+                welcomeMessage.textContent = `Willkommen zurück, ${this.currentUser.name}!`;
+            }
+
+            // Load recent profiles
+            await this.loadRecentProfiles();
+            
+            // Load quick stats
+            await this.loadQuickStats();
+            
+        } catch (error) {
+            console.error('Error loading home content:', error);
         }
+    }
+
+    async loadRecentProfiles() {
+        try {
+            const recentProfiles = this.profiles
+                .sort((a, b) => new Date(b.lastUsed) - new Date(a.lastUsed))
+                .slice(0, 5);
+
+            const container = document.getElementById('recentProfilesContainer');
+            if (container) {
+                container.innerHTML = this.renderRecentProfilesList(recentProfiles);
+            }
+        } catch (error) {
+            console.error('Error loading recent profiles:', error);
+        }
+    }
+
+    async loadQuickStats() {
+        const stats = {
+            totalProfiles: this.profiles.length,
+            activeProfiles: this.profiles.filter(p => p.status === 'active').length,
+            totalChats: this.profiles.reduce((sum, p) => sum + (p.chatCount || 0), 0),
+            weeklyUsage: this.calculateWeeklyUsage()
+        };
+
+        const container = document.getElementById('quickStatsContainer');
+        if (container) {
+            container.innerHTML = this.renderQuickStats(stats);
+        }
+    }
+
+    // ========================================
+    // PROFILES SECTION
+    // ========================================
+
+    initializeProfilesSection() {
+        // Profiles section specific initialization
+    }
+
+    async loadProfilesContent() {
+        await this.loadProfiles();
+        this.renderProfilesSection();
+    }
+
+    async loadProfiles() {
+        try {
+            const response = await fetch('/api/profiles', {
+                headers: this.getAuthHeaders()
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.profiles = data.profiles || [];
+                this.filteredProfiles = [...this.profiles];
+            } else {
+                console.error('Failed to load profiles');
+                this.profiles = [];
+            }
+        } catch (error) {
+            console.error('Error loading profiles:', error);
+            this.profiles = [];
+        }
+    }
+
+    renderProfilesSection() {
+        this.filterAndRenderProfiles();
+        this.updateProfilesHeader();
+    }
+
+    filterAndRenderProfiles() {
+        let filtered = [...this.profiles];
+
+        // Apply search filter
+        if (this.searchQuery) {
+            filtered = filtered.filter(profile => 
+                profile.name.toLowerCase().includes(this.searchQuery) ||
+                profile.category.toLowerCase().includes(this.searchQuery) ||
+                (profile.description && profile.description.toLowerCase().includes(this.searchQuery))
+            );
+        }
+
+        // Apply category filter
+        if (this.currentFilter !== 'all') {
+            filtered = filtered.filter(profile => 
+                profile.category.toLowerCase() === this.currentFilter.toLowerCase()
+            );
+        }
+
+        // Apply sorting
+        filtered.sort((a, b) => {
+            switch (this.currentSort) {
+                case 'name':
+                    return a.name.localeCompare(b.name);
+                case 'category':
+                    return a.category.localeCompare(b.category);
+                case 'created':
+                    return new Date(b.createdAt) - new Date(a.createdAt);
+                case 'lastUsed':
+                default:
+                    return new Date(b.lastUsed || b.updatedAt) - new Date(a.lastUsed || a.updatedAt);
+            }
+        });
+
+        this.filteredProfiles = filtered;
+        this.renderProfilesList();
+    }
+
+    renderProfilesList() {
+        const container = document.getElementById('profilesContainer');
+        if (!container) return;
+
+        if (this.filteredProfiles.length === 0) {
+            container.innerHTML = this.renderEmptyProfilesState();
+            return;
+        }
+
+        const html = this.filteredProfiles.map(profile => 
+            this.renderProfileCard(profile)
+        ).join('');
+
+        container.innerHTML = html;
+
+        // Add event listeners to profile cards
+        this.initializeProfileCardEvents();
+    }
+
+    renderProfileCard(profile) {
+        const isSelected = this.selectedProfiles.has(profile._id);
+        const lastUsed = profile.lastUsed ? 
+            new Date(profile.lastUsed).toLocaleDateString('de-DE') : 
+            'Nie verwendet';
+
+        return `
+            <div class="profile-card ${isSelected ? 'selected' : ''}" data-profile-id="${profile._id}">
+                <div class="profile-card-header">
+                    <div class="profile-checkbox">
+                        <input type="checkbox" class="profile-select" 
+                               data-profile-id="${profile._id}" ${isSelected ? 'checked' : ''}>
+                    </div>
+                    <div class="profile-category">${profile.category}</div>
+                    <div class="profile-menu">
+                        <button class="profile-menu-btn" data-profile-id="${profile._id}">⋮</button>
+                    </div>
+                </div>
+                
+                <div class="profile-card-body">
+                    <h3 class="profile-title">${profile.name}</h3>
+                    <p class="profile-description">${profile.description || 'Keine Beschreibung verfügbar'}</p>
+                    
+                    <div class="profile-stats">
+                        <div class="profile-stat">
+                            <span class="stat-icon">💬</span>
+                            <span class="stat-value">${profile.chatCount || 0}</span>
+                            <span class="stat-label">Chats</span>
+                        </div>
+                        <div class="profile-stat">
+                            <span class="stat-icon">📅</span>
+                            <span class="stat-value">${lastUsed}</span>
+                            <span class="stat-label">Zuletzt</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="profile-card-footer">
+                    <button class="btn btn-secondary btn-sm profile-edit-btn" data-profile-id="${profile._id}">
+                        ⚙️ Bearbeiten
+                    </button>
+                    <button class="btn btn-primary btn-sm profile-chat-btn" data-profile-id="${profile._id}">
+                        💬 Chat starten
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    initializeProfileCardEvents() {
+        // Profile selection
+        document.querySelectorAll('.profile-select').forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const profileId = e.target.dataset.profileId;
+                if (e.target.checked) {
+                    this.selectedProfiles.add(profileId);
+                } else {
+                    this.selectedProfiles.delete(profileId);
+                }
+                this.updateProfilesHeader();
+                this.updateProfileCardSelection(profileId, e.target.checked);
+            });
+        });
+
+        // Profile chat buttons
+        document.querySelectorAll('.profile-chat-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const profileId = e.target.dataset.profileId;
+                this.startProfileChat(profileId);
+            });
+        });
+
+        // Profile edit buttons
+        document.querySelectorAll('.profile-edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const profileId = e.target.dataset.profileId;
+                this.editProfile(profileId);
+            });
+        });
+
+        // Profile menu buttons
+        document.querySelectorAll('.profile-menu-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const profileId = e.target.dataset.profileId;
+                const rect = e.target.getBoundingClientRect();
+                this.showProfileContextMenu(rect.right - 10, rect.bottom + 5, profileId);
+            });
+        });
+
+        // Profile card clicks
+        document.querySelectorAll('.profile-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // Skip if clicking on interactive elements
+                if (e.target.closest('.profile-checkbox, .profile-menu, .btn')) {
+                    return;
+                }
+                
+                const profileId = card.dataset.profileId;
+                this.viewProfile(profileId);
+            });
+        });
+    }
+
+    // ========================================
+    // PROFILE ACTIONS
+    // ========================================
+
+    async startProfileChat(profileId) {
+        const profile = this.profiles.find(p => p._id === profileId);
+        if (!profile) return;
+
+        try {
+            // Update last used timestamp
+            await this.updateProfileLastUsed(profileId);
+            
+            // Open chat modal or navigate to chat
+            this.openProfileChatModal(profile);
+            
+        } catch (error) {
+            console.error('Error starting profile chat:', error);
+            this.showToast('Fehler beim Starten des Chats', 'error');
+        }
+    }
+
+    async editProfile(profileId) {
+        const profile = this.profiles.find(p => p._id === profileId);
+        if (!profile) return;
+
+        this.showEditProfileModal(profile);
+    }
+
+    async deleteProfile(profileId) {
+        if (!confirm('Profil wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/profiles/${profileId}`, {
+                method: 'DELETE',
+                headers: this.getAuthHeaders()
+            });
+
+            if (response.ok) {
+                this.profiles = this.profiles.filter(p => p._id !== profileId);
+                this.selectedProfiles.delete(profileId);
+                this.filterAndRenderProfiles();
+                this.showToast('Profil erfolgreich gelöscht', 'success');
+            } else {
+                throw new Error('Failed to delete profile');
+            }
+        } catch (error) {
+            console.error('Error deleting profile:', error);
+            this.showToast('Fehler beim Löschen des Profils', 'error');
+        }
+    }
+
+    async duplicateProfile(profileId) {
+        const profile = this.profiles.find(p => p._id === profileId);
+        if (!profile) return;
+
+        try {
+            const duplicatedProfile = {
+                ...profile,
+                name: `${profile.name} (Kopie)`,
+                _id: undefined,
+                createdAt: undefined,
+                updatedAt: undefined,
+                lastUsed: undefined,
+                chatCount: 0
+            };
+
+            const response = await fetch('/api/profiles', {
+                method: 'POST',
+                headers: {
+                    ...this.getAuthHeaders(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(duplicatedProfile)
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.profiles.push(data.profile);
+                this.filterAndRenderProfiles();
+                this.showToast('Profil erfolgreich dupliziert', 'success');
+            } else {
+                throw new Error('Failed to duplicate profile');
+            }
+        } catch (error) {
+            console.error('Error duplicating profile:', error);
+            this.showToast('Fehler beim Duplizieren des Profils', 'error');
+        }
+    }
+
+    // ========================================
+    // BULK ACTIONS
+    // ========================================
+
+    async handleBulkAction(action) {
+        const selectedIds = Array.from(this.selectedProfiles);
+        if (selectedIds.length === 0) return;
+
+        try {
+            const response = await fetch('/api/profiles/bulk', {
+                method: 'POST',
+                headers: {
+                    ...this.getAuthHeaders(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: action,
+                    profileIds: selectedIds
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                
+                switch (action) {
+                    case 'delete':
+                        this.profiles = this.profiles.filter(p => !selectedIds.includes(p._id));
+                        this.selectedProfiles.clear();
+                        break;
+                    case 'archive':
+                        selectedIds.forEach(id => {
+                            const profile = this.profiles.find(p => p._id === id);
+                            if (profile) profile.status = 'archived';
+                        });
+                        break;
+                    case 'activate':
+                        selectedIds.forEach(id => {
+                            const profile = this.profiles.find(p => p._id === id);
+                            if (profile) profile.status = 'active';
+                        });
+                        break;
+                }
+
+                this.filterAndRenderProfiles();
+                this.showToast(data.message || 'Bulk-Aktion erfolgreich ausgeführt', 'success');
+            } else {
+                throw new Error('Bulk action failed');
+            }
+        } catch (error) {
+            console.error('Error performing bulk action:', error);
+            this.showToast('Fehler bei der Bulk-Aktion', 'error');
+        }
+    }
+
+    toggleSelectAllProfiles() {
+        const visibleProfiles = this.filteredProfiles;
+        const allSelected = visibleProfiles.every(p => this.selectedProfiles.has(p._id));
+
+        if (allSelected) {
+            // Deselect all
+            visibleProfiles.forEach(p => this.selectedProfiles.delete(p._id));
+        } else {
+            // Select all
+            visibleProfiles.forEach(p => this.selectedProfiles.add(p._id));
+        }
+
+        this.renderProfilesList();
+        this.updateProfilesHeader();
+    }
+
+    // ========================================
+    // CALENDAR SECTION
+    // ========================================
+
+    initializeCalendarSection() {
+        // Calendar section initialization
+    }
+
+    async loadCalendarContent() {
+        try {
+            // Load calendar data
+            const container = document.getElementById('calendarContainer');
+            if (container) {
+                container.innerHTML = `
+                    <div class="coming-soon">
+                        <div class="coming-soon-icon">📅</div>
+                        <h3>Kalender-Integration</h3>
+                        <p>Die Kalender-Funktion wird bald verfügbar sein.</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading calendar content:', error);
+        }
+    }
+
+    // ========================================
+    // EMAIL SECTION
+    // ========================================
+
+    initializeEmailSection() {
+        // Email section initialization
+    }
+
+    async loadEmailContent() {
+        try {
+            // Load email data
+            const container = document.getElementById('emailContainer');
+            if (container) {
+                container.innerHTML = `
+                    <div class="coming-soon">
+                        <div class="coming-soon-icon">📧</div>
+                        <h3>E-Mail-Integration</h3>
+                        <p>Die E-Mail-Funktion wird bald verfügbar sein.</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading email content:', error);
+        }
+    }
+
+    // ========================================
+    // USER MANAGEMENT
+    // ========================================
+
+    async loadUserData() {
+        // Load user-specific data
+        await this.loadProfiles();
     }
 
     handleLogout() {
+        // Clear local storage
         localStorage.removeItem('allKiLoggedIn');
         localStorage.removeItem('allKiUserEmail');
         localStorage.removeItem('allKiUserName');
@@ -766,223 +750,239 @@ class DashboardManager {
         localStorage.removeItem('allKiNewsletter');
 
         this.showToast('Erfolgreich abgemeldet!', 'success');
+
+        // Redirect to login
+        setTimeout(() => {
+            window.location.href = 'index.html';
+        }, 1500);
+    }
+
+    handleAuthenticationError() {
+        this.showToast('Sitzung abgelaufen. Bitte melden Sie sich erneut an.', 'error');
         
         setTimeout(() => {
-            window.location.href = '/login.html';
-        }, 1000);
+            this.handleLogout();
+        }, 2000);
     }
 
-    updateProfileTabs() {
-        const tabsContainer = document.getElementById('profileTabs');
+    // ========================================
+    // UTILITY METHODS
+    // ========================================
+
+    updateProfilesHeader() {
+        const selectedCount = this.selectedProfiles.size;
+        const totalCount = this.filteredProfiles.length;
         
-        // Clear existing tabs except general
-        const generalTab = tabsContainer.querySelector('[data-profile="general"]');
-        tabsContainer.innerHTML = '';
-        if (generalTab) {
-            tabsContainer.appendChild(generalTab);
+        const counterElement = document.getElementById('profilesCounter');
+        if (counterElement) {
+            if (selectedCount > 0) {
+                counterElement.textContent = `${selectedCount} von ${totalCount} ausgewählt`;
+            } else {
+                counterElement.textContent = `${totalCount} Profile${totalCount !== 1 ? '' : ''}`;
+            }
         }
 
-        // Add profile tabs (first 5 most recent)
-        this.profiles.slice(0, 5).forEach(profile => {
-            this.addProfileTab(profile.name, profile._id);
-        });
-    }
-
-    addProfileTab(profileName, profileId) {
-        const tabsContainer = document.getElementById('profileTabs');
-        
-        // Remove active from all tabs
-        tabsContainer.querySelectorAll('.tab').forEach(tab => {
-            tab.classList.remove('active');
-        });
-        
-        // Create new tab
-        const newTab = document.createElement('div');
-        newTab.className = 'tab';
-        newTab.setAttribute('data-profile', profileId);
-        newTab.innerHTML = `<span>🎯 ${profileName}</span>`;
-        
-        tabsContainer.appendChild(newTab);
-        
-        // Add click event
-        newTab.addEventListener('click', () => {
-            tabsContainer.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            newTab.classList.add('active');
-            this.currentProfile = profileId;
-        });
-    }
-
-    openQuickChat() {
-        const input = document.getElementById('quickChatInput');
-        const message = input.value.trim();
-        
-        if (message) {
-            this.showModal('quickChatModal');
-            this.addChatMessage('chatMessages', message, 'user');
-            input.value = '';
-            
-            // Call real AI API
-            this.sendToAI(message, 'chatMessages');
-        } else {
-            this.showModal('quickChatModal');
+        // Show/hide bulk actions
+        const bulkActions = document.getElementById('bulkActionsContainer');
+        if (bulkActions) {
+            bulkActions.style.display = selectedCount > 0 ? 'flex' : 'none';
         }
     }
 
-    openProfileCreation() {
-        this.showModal('profileModal');
-        this.resetProfileChat();
+    updateProfileCardSelection(profileId, selected) {
+        const card = document.querySelector(`[data-profile-id="${profileId}"]`);
+        if (card) {
+            card.classList.toggle('selected', selected);
+        }
     }
 
-    resetProfileChat() {
-        const messagesContainer = document.getElementById('profileChatMessages');
-        if (messagesContainer) {
-            messagesContainer.innerHTML = `
-                <div class="chat-message ai-message">
-                    <span class="message-avatar">🤖</span>
-                    <div class="message-content">
-                        <p>Hallo! Lassen Sie uns gemeinsam ein neues Profil erstellen. Wie soll Ihr Profil heißen?</p>
-                    </div>
+    renderEmptyProfilesState() {
+        const hasSearch = this.searchQuery || this.currentFilter !== 'all';
+        
+        if (hasSearch) {
+            return `
+                <div class="profiles-empty">
+                    <div class="empty-icon">🔍</div>
+                    <h3>Keine Profile gefunden</h3>
+                    <p>Ihre Suche ergab keine Treffer. Versuchen Sie andere Suchbegriffe oder Filter.</p>
+                    <button class="btn btn-secondary" onclick="dashboardManager.clearFilters()">
+                        Filter zurücksetzen
+                    </button>
                 </div>
             `;
         }
-        
-        const profilePreview = document.getElementById('profilePreview');
-        if (profilePreview) {
-            profilePreview.innerHTML = `
-                <h4>📋 Profil-Vorschau</h4>
-                <p>Informationen werden während des Interviews gesammelt...</p>
-            `;
-        }
-        
-        const saveBtn = document.getElementById('saveProfileBtn');
-        if (saveBtn) {
-            saveBtn.classList.add('hidden');
-        }
-        
-        this.profileConversationHistory = [];
-    }
 
-    // Modal management
-    showModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
-        }
-    }
-
-    closeModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.add('hidden');
-            document.body.style.overflow = 'auto';
-        }
-    }
-
-    createProfileDetailsModal() {
-        const modal = document.createElement('div');
-        modal.id = 'profileDetailsModal';
-        modal.className = 'modal-overlay hidden';
-        modal.innerHTML = '<div class="modal-content large"></div>';
-        document.body.appendChild(modal);
-        return modal;
-    }
-
-    addChatMessage(containerId, message, sender) {
-        const container = document.getElementById(containerId);
-        if (!container) {
-            console.error('Container not found:', containerId);
-            return null;
-        }
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `chat-message ${sender}-message`;
-        
-        const avatar = sender === 'user' ? '👤' : '🤖';
-        
-        messageDiv.innerHTML = `
-            <span class="message-avatar">${avatar}</span>
-            <div class="message-content">
-                <p>${message}</p>
+        return `
+            <div class="profiles-empty">
+                <div class="empty-icon">👤</div>
+                <h3>Noch keine Profile erstellt</h3>
+                <p>Erstellen Sie Ihr erstes AI-Profil, um personalisierte Unterhaltungen zu führen.</p>
+                <button class="btn btn-primary create-first-btn" onclick="dashboardManager.showCreateProfileModal()">
+                    Erstes Profil erstellen
+                </button>
             </div>
         `;
-        
-        container.appendChild(messageDiv);
-        container.scrollTop = container.scrollHeight;
-        
-        return messageDiv;
     }
 
-    async sendToAI(message, containerId) {
-        const loadingMsg = this.addChatMessage(containerId, '🤔 Denkt nach...', 'ai');
-        
-        try {
-            const response = await fetch('/api/chat/quick', {
-                method: 'POST',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify({
-                    message: message,
-                    userContext: {
-                        name: localStorage.getItem('allKiUserName'),
-                        email: localStorage.getItem('allKiUserEmail')
-                    }
-                })
-            });
+    clearFilters() {
+        document.getElementById('profileSearch').value = '';
+        document.getElementById('profileFilter').value = 'all';
+        this.searchQuery = '';
+        this.currentFilter = 'all';
+        this.filterAndRenderProfiles();
+    }
 
-            const data = await response.json();
+    calculateWeeklyUsage() {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        
+        return this.profiles.filter(profile => 
+            profile.lastUsed && new Date(profile.lastUsed) > oneWeekAgo
+        ).length;
+    }
+
+    async updateProfileLastUsed(profileId) {
+        try {
+            await fetch(`/api/profiles/${profileId}/used`, {
+                method: 'POST',
+                headers: this.getAuthHeaders()
+            });
             
-            if (loadingMsg && loadingMsg.parentNode) {
-                loadingMsg.remove();
-            }
-            
-            if (data.success && data.response) {
-                this.addChatMessage(containerId, data.response, 'ai');
-            } else {
-                this.addChatMessage(containerId, 'Entschuldigung, ich konnte nicht antworten. Bitte versuchen Sie es erneut.', 'ai');
+            // Update local data
+            const profile = this.profiles.find(p => p._id === profileId);
+            if (profile) {
+                profile.lastUsed = new Date().toISOString();
             }
         } catch (error) {
-            console.error('AI Chat Error:', error);
-            
-            if (loadingMsg && loadingMsg.parentNode) {
-                loadingMsg.remove();
-            }
-            
-            this.addChatMessage(containerId, 'Verbindungsfehler. Bitte überprüfen Sie Ihre Internetverbindung.', 'ai');
+            console.error('Error updating profile last used:', error);
         }
     }
 
-    showLoading() {
-        document.getElementById('loadingOverlay')?.classList.remove('hidden');
+    saveCurrentState() {
+        const state = {
+            currentSection: this.currentSection,
+            searchQuery: this.searchQuery,
+            currentSort: this.currentSort,
+            currentFilter: this.currentFilter
+        };
+        
+        localStorage.setItem('allKiDashboardState', JSON.stringify(state));
     }
 
-    hideLoading() {
-        document.getElementById('loadingOverlay')?.classList.add('hidden');
+    loadPreviousState() {
+        try {
+            const savedState = localStorage.getItem('allKiDashboardState');
+            if (savedState) {
+                const state = JSON.parse(savedState);
+                this.searchQuery = state.searchQuery || '';
+                this.currentSort = state.currentSort || 'lastUsed';
+                this.currentFilter = state.currentFilter || 'all';
+                
+                // Apply saved state to UI elements
+                const searchInput = document.getElementById('profileSearch');
+                if (searchInput) searchInput.value = this.searchQuery;
+                
+                const sortSelect = document.getElementById('profileSort');
+                if (sortSelect) sortSelect.value = this.currentSort;
+                
+                const filterSelect = document.getElementById('profileFilter');
+                if (filterSelect) filterSelect.value = this.currentFilter;
+            }
+        } catch (error) {
+            console.error('Error loading previous state:', error);
+        }
+    }
+
+    getAuthHeaders() {
+        const token = localStorage.getItem('allKiAuthToken');
+        const email = localStorage.getItem('allKiUserEmail');
+        
+        return {
+            'Authorization': `Bearer ${token}`,
+            'X-User-Email': email
+        };
     }
 
     showToast(message, type = 'info') {
-        const toastContainer = document.getElementById('toastContainer');
-        if (!toastContainer) return;
-        
+        // Create toast container if it doesn't exist
+        let container = document.getElementById('toastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+        }
+
         const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
+        toast.className = `toast toast-${type}`;
         
-        toastContainer.appendChild(toast);
-        
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+
+        toast.innerHTML = `
+            <span class="toast-icon">${icons[type]}</span>
+            <span class="toast-message">${message}</span>
+            <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+        `;
+
+        container.appendChild(toast);
+
+        // Auto-remove after 5 seconds
         setTimeout(() => {
-            if (toast.parentNode) {
+            if (toast.parentElement) {
                 toast.remove();
             }
-        }, 4000);
+        }, 5000);
+
+        // Animate in
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(0)';
+        });
+    }
+
+    // Placeholder methods for modal functionality
+    showCreateProfileModal() {
+        // TODO: Implement create profile modal
+        this.showToast('Create Profile Modal - Coming Soon', 'info');
+    }
+
+    showEditProfileModal(profile) {
+        // TODO: Implement edit profile modal
+        this.showToast('Edit Profile Modal - Coming Soon', 'info');
+    }
+
+    openProfileChatModal(profile) {
+        // TODO: Implement profile chat modal
+        this.showToast(`Chat with ${profile.name} - Coming Soon`, 'info');
+    }
+
+    showProfileContextMenu(x, y, profileId) {
+        // TODO: Implement profile context menu
+        console.log('Profile context menu for:', profileId);
+    }
+
+    viewProfile(profileId) {
+        // TODO: Implement profile detail view
+        console.log('View profile:', profileId);
+    }
+
+    renderRecentProfilesList(profiles) {
+        // TODO: Implement recent profiles rendering
+        return '<p>Recent profiles coming soon...</p>';
+    }
+
+    renderQuickStats(stats) {
+        // TODO: Implement quick stats rendering
+        return '<p>Quick stats coming soon...</p>';
     }
 }
 
-// Initialize Dashboard when DOM is loaded
+// Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.dashboardManager = new DashboardManager();
 });
-
-// Export for use in other scripts
-window.DashboardManager = DashboardManager;

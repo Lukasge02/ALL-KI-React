@@ -28,9 +28,11 @@ app.get('/', (req, res) => {
 app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
+
 app.get('/chat.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'chat.html'));
 });
+
 app.get('/dashboard.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
@@ -45,15 +47,24 @@ app.get('/test', (req, res) => {
 
 // Database health check
 app.get('/api/health', async (req, res) => {
-    const dbHealth = await database.healthCheck();
-    const dbStats = await database.getStats();
-    
-    res.json({
-        server: 'healthy',
-        database: dbHealth,
-        stats: dbStats,
-        timestamp: new Date().toISOString()
-    });
+    try {
+        const dbHealth = await database.healthCheck();
+        const dbStats = await database.getStats();
+        
+        res.json({
+            server: 'healthy',
+            database: dbHealth,
+            stats: dbStats,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Health check error:', error);
+        res.status(500).json({
+            server: 'healthy',
+            database: { status: 'error', message: error.message },
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 // API Routes
@@ -65,6 +76,7 @@ try {
 } catch (error) {
     console.log('⚠️ Chat model not loaded:', error.message);
 }
+
 try {
     const authRoutes = require('./src/routes/auth');
     app.use('/api/auth', authRoutes);
@@ -93,27 +105,23 @@ try {
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Error:', err.stack);
-    res.status(500).json({ error: 'Etwas ist schief gelaufen!' });
+    res.status(500).json({ 
+        error: 'Etwas ist schief gelaufen!',
+        message: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error'
+    });
 });
 
-// 404 handler for API routes
-app.use('/api/*', (req, res) => {
-    res.status(404).json({ error: 'API Route nicht gefunden' });
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({ 
+        error: 'Route nicht gefunden',
+        path: req.path 
+    });
 });
 
-// Start server
+// Server starten
 app.listen(PORT, () => {
-    console.log('\n🚀 =================================');
-    console.log(`   ALL-KI Server gestartet!`);
-    console.log(`   Port: ${PORT}`);
-    console.log(`   URL: http://localhost:${PORT}`);
-    console.log('🚀 =================================\n');
-    
-    console.log('📄 Verfügbare Routes:');
-    console.log(`   • http://localhost:${PORT}/ (Login)`);
-    console.log(`   • http://localhost:${PORT}/dashboard`);
-    console.log(`   • http://localhost:${PORT}/test`);
-    console.log(`   • http://localhost:${PORT}/api/auth/users\n`);
+    console.log(`🚀 Server läuft auf Port ${PORT}`);
+    console.log(`🌐 Zugriff unter: http://localhost:${PORT}`);
+    console.log(`📊 Health Check: http://localhost:${PORT}/api/health`);
 });
-
-module.exports = app;

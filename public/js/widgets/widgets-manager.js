@@ -1,487 +1,452 @@
-// WidgetManager - Zentrales Widget-Verwaltungssystem für All-KI
+/**
+ * 🧩 WIDGETS MANAGER
+ * Zentraler Manager für alle Widget-Operationen
+ * 
+ * SEPARATION OF CONCERNS:
+ * - Widgets Container Management
+ * - Widget Lifecycle (Create, Update, Delete)
+ * - Drag & Drop Functionality
+ * - Widget Configuration
+ * - API Communication
+ */
 
-class WidgetManager {
+class WidgetsManager {
     constructor() {
-        this.widgets = new Map(); // Aktive Widget-Instanzen
-        this.widgetTypes = new Map(); // Registrierte Widget-Typen
-        this.currentLayout = 'grid'; // grid, masonry, list
-        this.isLayoutMode = false; // Layout-Bearbeitungsmodus
-        this.draggedWidget = null; // Aktuell gezogenes Widget
-        this.contextMenuWidget = null; // Widget für Kontextmenü
-        this.currentFilter = 'all'; // Aktueller Filter
-        this.refreshInterval = null; // Auto-Refresh Timer
+        this.widgets = new Map();
+        this.widgetTypes = new Map();
+        this.draggedWidget = null;
+        this.currentUser = null;
         
-        this.init();
-    }
-
-    init() {
-        console.log('🧩 Widget Manager wird initialisiert...');
-        this.checkAuth();
-        this.registerWidgetTypes();
-        this.bindEvents();
+        this.initializeWidgetTypes();
+        this.initializeEventListeners();
         this.loadUserWidgets();
-        this.setupAutoRefresh();
-        console.log('✅ Widget Manager erfolgreich initialisiert');
-    }
-
-    checkAuth() {
-        const isLoggedIn = localStorage.getItem('allKiLoggedIn');
-        if (isLoggedIn !== 'true') {
-            window.location.href = '/login.html';
-            return;
-        }
     }
 
     // ========================================
-    // WIDGET-TYPEN REGISTRIERUNG
+    // INITIALIZATION
     // ========================================
 
-    registerWidgetTypes() {
-        console.log('📝 Registriere Widget-Typen...');
-
-        // Produktivitäts-Widgets
-        this.registerWidget('pomodoro', {
+    initializeWidgetTypes() {
+        // Registriere alle verfügbaren Widget-Typen
+        this.widgetTypes.set('pomodoro', {
             name: 'Pomodoro Timer',
-            category: 'productivity',
-            icon: '⏰',
-            description: 'Fokussiertes Arbeiten mit der Pomodoro-Technik',
-            defaultSize: { width: 2, height: 2 },
-            component: PomodoroWidget,
-            config: {
-                workDuration: { type: 'number', default: 25, label: 'Arbeitszeit (Minuten)' },
-                breakDuration: { type: 'number', default: 5, label: 'Pausenzeit (Minuten)' },
-                longBreakDuration: { type: 'number', default: 15, label: 'Lange Pause (Minuten)' },
-                sessionsUntilLongBreak: { type: 'number', default: 4, label: 'Sessions bis lange Pause' },
-                enableNotifications: { type: 'boolean', default: true, label: 'Benachrichtigungen aktivieren' },
-                enableSounds: { type: 'boolean', default: false, label: 'Sounds aktivieren' }
-            }
+            icon: '⏱️',
+            category: 'Produktivität',
+            description: 'Zeitmanagement mit der Pomodoro-Technik',
+            defaultConfig: {
+                workTime: 25,
+                breakTime: 5,
+                longBreakTime: 15,
+                sessionsUntilLongBreak: 4,
+                autoStartBreaks: false,
+                notifications: true
+            },
+            configFields: [
+                { key: 'workTime', label: 'Arbeitszeit (Minuten)', type: 'number', min: 1, max: 60 },
+                { key: 'breakTime', label: 'Kurze Pause (Minuten)', type: 'number', min: 1, max: 30 },
+                { key: 'longBreakTime', label: 'Lange Pause (Minuten)', type: 'number', min: 5, max: 60 },
+                { key: 'sessionsUntilLongBreak', label: 'Sessions bis lange Pause', type: 'number', min: 2, max: 10 },
+                { key: 'autoStartBreaks', label: 'Pausen automatisch starten', type: 'boolean' },
+                { key: 'notifications', label: 'Benachrichtigungen aktivieren', type: 'boolean' }
+            ]
         });
 
-        this.registerWidget('habit-tracker', {
-            name: 'Habit Tracker',
-            category: 'productivity',
+        this.widgetTypes.set('todo', {
+            name: 'Aufgabenliste',
             icon: '✅',
-            description: 'Verfolge deine täglichen Gewohnheiten und Ziele',
-            defaultSize: { width: 3, height: 2 },
-            component: HabitTrackerWidget,
-            config: {
-                maxHabits: { type: 'number', default: 5, label: 'Maximale Anzahl Gewohnheiten' },
-                showProgress: { type: 'boolean', default: true, label: 'Fortschritt anzeigen' },
-                weekStartsOn: { type: 'select', default: 'monday', options: ['monday', 'sunday'], label: 'Woche beginnt am' }
-            }
+            category: 'Produktivität',
+            description: 'Verwalte deine täglichen Aufgaben',
+            defaultConfig: {
+                maxTasks: 10,
+                showCompleted: true,
+                autoArchive: false,
+                categories: ['Arbeit', 'Privat', 'Einkaufen']
+            },
+            configFields: [
+                { key: 'maxTasks', label: 'Maximale Anzahl Aufgaben', type: 'number', min: 5, max: 50 },
+                { key: 'showCompleted', label: 'Erledigte Aufgaben anzeigen', type: 'boolean' },
+                { key: 'autoArchive', label: 'Automatisch archivieren', type: 'boolean' }
+            ]
         });
 
-        this.registerWidget('quick-notes', {
-            name: 'Quick Notes',
-            category: 'productivity',
+        this.widgetTypes.set('notes', {
+            name: 'Schnellnotizen',
             icon: '📝',
-            description: 'Schnelle Notizen und Gedanken festhalten',
-            defaultSize: { width: 2, height: 3 },
-            component: QuickNotesWidget,
-            config: {
-                maxNotes: { type: 'number', default: 10, label: 'Maximale Anzahl Notizen' },
-                enableTags: { type: 'boolean', default: true, label: 'Tags aktivieren' },
-                autoSave: { type: 'boolean', default: true, label: 'Automatisch speichern' }
-            }
+            category: 'Produktivität',
+            description: 'Halte wichtige Notizen fest',
+            defaultConfig: {
+                maxNotes: 5,
+                autoSave: true,
+                fontSize: 'medium'
+            },
+            configFields: [
+                { key: 'maxNotes', label: 'Maximale Anzahl Notizen', type: 'number', min: 1, max: 20 },
+                { key: 'autoSave', label: 'Automatisch speichern', type: 'boolean' },
+                { key: 'fontSize', label: 'Schriftgröße', type: 'select', options: ['small', 'medium', 'large'] }
+            ]
         });
 
-        // Gesundheits-Widgets
-        this.registerWidget('water-tracker', {
-            name: 'Water Tracker',
-            category: 'health',
-            icon: '💧',
-            description: 'Verfolge deine tägliche Wasseraufnahme',
-            defaultSize: { width: 2, height: 1 },
-            component: WaterTrackerWidget,
-            config: {
-                dailyGoal: { type: 'number', default: 2000, label: 'Tägliches Ziel (ml)' },
-                reminderInterval: { type: 'number', default: 60, label: 'Erinnerungsinterval (Minuten)' },
-                cupSize: { type: 'number', default: 250, label: 'Standard Tassengröße (ml)' }
-            }
+        this.widgetTypes.set('weather', {
+            name: 'Wetter',
+            icon: '🌤️',
+            category: 'Informationen',
+            description: 'Aktuelle Wetterinformationen',
+            defaultConfig: {
+                location: 'Detmold',
+                units: 'metric',
+                showForecast: true,
+                updateInterval: 30
+            },
+            configFields: [
+                { key: 'location', label: 'Standort', type: 'text' },
+                { key: 'units', label: 'Einheiten', type: 'select', options: ['metric', 'imperial'] },
+                { key: 'showForecast', label: 'Vorhersage anzeigen', type: 'boolean' },
+                { key: 'updateInterval', label: 'Update-Intervall (Minuten)', type: 'number', min: 5, max: 120 }
+            ]
         });
 
-        this.registerWidget('mood-tracker', {
-            name: 'Mood Tracker',
-            category: 'health',
-            icon: '😊',
-            description: 'Verfolge deine Stimmung und Emotionen',
-            defaultSize: { width: 2, height: 2 },
-            component: MoodTrackerWidget,
-            config: {
-                enableNotes: { type: 'boolean', default: true, label: 'Notizen aktivieren' },
-                moodScale: { type: 'select', default: '5-point', options: ['3-point', '5-point', '10-point'], label: 'Stimmungsskala' },
-                showTrends: { type: 'boolean', default: true, label: 'Trends anzeigen' }
-            }
-        });
-
-        // Finanz-Widgets
-        this.registerWidget('expense-tracker', {
-            name: 'Expense Tracker',
-            category: 'finance',
-            icon: '💰',
-            description: 'Verfolge deine Ausgaben und Budget',
-            defaultSize: { width: 3, height: 2 },
-            component: ExpenseTrackerWidget,
-            config: {
-                currency: { type: 'select', default: 'EUR', options: ['EUR', 'USD', 'GBP'], label: 'Währung' },
-                monthlyBudget: { type: 'number', default: 1000, label: 'Monatliches Budget' },
-                enableCategories: { type: 'boolean', default: true, label: 'Kategorien aktivieren' }
-            }
-        });
-
-        this.registerWidget('crypto-portfolio', {
-            name: 'Crypto Portfolio',
-            category: 'finance',
-            icon: '₿',
-            description: 'Überwache dein Krypto-Portfolio',
-            defaultSize: { width: 3, height: 2 },
-            component: CryptoPortfolioWidget,
-            config: {
-                currencies: { type: 'text', default: 'BTC,ETH,ADA', label: 'Kryptowährungen (kommagetrennt)' },
-                refreshInterval: { type: 'number', default: 300, label: 'Aktualisierung (Sekunden)' },
-                showPercentage: { type: 'boolean', default: true, label: 'Prozentuale Änderung anzeigen' }
-            }
-        });
-
-        // Lern-Widgets
-        this.registerWidget('flashcards', {
-            name: 'Flashcards',
-            category: 'learning',
-            icon: '🎴',
-            description: 'Digitale Karteikarten zum Lernen',
-            defaultSize: { width: 2, height: 2 },
-            component: FlashcardsWidget,
-            config: {
-                autoFlip: { type: 'boolean', default: false, label: 'Automatisch umdrehen' },
-                shuffleCards: { type: 'boolean', default: true, label: 'Karten mischen' },
-                showProgress: { type: 'boolean', default: true, label: 'Fortschritt anzeigen' }
-            }
-        });
-
-        // Social Widgets
-        this.registerWidget('contact-reminder', {
-            name: 'Contact Reminder',
-            category: 'social',
-            icon: '👥',
-            description: 'Erinnerungen für Kontakte mit Freunden und Familie',
-            defaultSize: { width: 2, height: 2 },
-            component: ContactReminderWidget,
-            config: {
-                defaultInterval: { type: 'number', default: 30, label: 'Standard Erinnerungsinterval (Tage)' },
-                enableNotifications: { type: 'boolean', default: true, label: 'Benachrichtigungen aktivieren' }
-            }
-        });
-
-        // Smart Home Widgets
-        this.registerWidget('device-control', {
-            name: 'Device Control',
-            category: 'smart-home',
-            icon: '🏠',
-            description: 'Steuerung für Smart Home Geräte',
-            defaultSize: { width: 3, height: 2 },
-            component: DeviceControlWidget,
-            config: {
-                hubType: { type: 'select', default: 'philips-hue', options: ['philips-hue', 'homekit', 'alexa'], label: 'Hub-Typ' },
-                showStatus: { type: 'boolean', default: true, label: 'Gerätestatus anzeigen' }
-            }
-        });
-
-        console.log(`✅ ${this.widgetTypes.size} Widget-Typen registriert`);
-    }
-
-    registerWidget(type, config) {
-        this.widgetTypes.set(type, {
-            type,
-            ...config,
-            apiEndpoint: `/api/widgets/${config.category}/${type}`
+        this.widgetTypes.set('quickchat', {
+            name: 'Quick Chat',
+            icon: '💬',
+            category: 'KI & Chat',
+            description: 'Schneller AI-Assistant',
+            defaultConfig: {
+                maxMessages: 20,
+                autoScroll: true,
+                showTimestamps: true
+            },
+            configFields: [
+                { key: 'maxMessages', label: 'Maximale Nachrichten', type: 'number', min: 5, max: 100 },
+                { key: 'autoScroll', label: 'Automatisch scrollen', type: 'boolean' },
+                { key: 'showTimestamps', label: 'Zeitstempel anzeigen', type: 'boolean' }
+            ]
         });
     }
 
-    // ========================================
-    // EVENT-HANDLING
-    // ========================================
-
-    bindEvents() {
+    initializeEventListeners() {
         // Widget hinzufügen
         document.getElementById('addWidgetBtn')?.addEventListener('click', () => {
-            this.openWidgetSelector();
+            this.showWidgetSelectionModal();
         });
 
-        document.getElementById('addWidgetPlaceholder')?.addEventListener('click', () => {
-            this.openWidgetSelector();
+        document.getElementById('addFirstWidgetBtn')?.addEventListener('click', () => {
+            this.showWidgetSelectionModal();
         });
 
-        // Layout-Modus
-        document.getElementById('layoutModeBtn')?.addEventListener('click', () => {
-            this.toggleLayoutMode();
-        });
-
-        // Filter-Tabs
-        document.querySelectorAll('.filter-tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                this.setFilter(tab.dataset.category);
-            });
-        });
-
-        // Sortierung
-        document.getElementById('sortWidgets')?.addEventListener('change', (e) => {
-            this.sortWidgets(e.target.value);
-        });
-
-        // Alle aktualisieren
+        // Alle Widgets aktualisieren
         document.getElementById('refreshAllBtn')?.addEventListener('click', () => {
             this.refreshAllWidgets();
         });
 
-        // Logout
-        document.getElementById('logout-btn')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.handleLogout();
+        // Modal Event Listeners
+        this.initializeModalEvents();
+
+        // Context Menu Events
+        this.initializeContextMenuEvents();
+
+        // Drag & Drop Events
+        this.initializeDragAndDrop();
+    }
+
+    initializeModalEvents() {
+        // Widget Selection Modal
+        const widgetModal = document.getElementById('widgetSelectionModal');
+        const closeWidgetModal = document.getElementById('closeWidgetModal');
+        
+        closeWidgetModal?.addEventListener('click', () => {
+            this.hideWidgetSelectionModal();
         });
 
-        // Kontextmenü
-        document.addEventListener('contextmenu', (e) => {
-            const widget = e.target.closest('.widget-container');
-            if (widget) {
-                e.preventDefault();
-                this.showContextMenu(e, widget.id.replace('widget-', ''));
+        // Widget Options Click
+        document.addEventListener('click', (e) => {
+            const widgetOption = e.target.closest('.widget-option');
+            if (widgetOption) {
+                const widgetType = widgetOption.dataset.type;
+                this.selectWidgetType(widgetType);
             }
         });
 
-        // Klick außerhalb Kontextmenü
-        document.addEventListener('click', () => {
-            this.hideContextMenu();
+        // Configuration Modal
+        const configModal = document.getElementById('widgetConfigModal');
+        const closeConfigModal = document.getElementById('closeConfigModal');
+        const cancelConfigBtn = document.getElementById('cancelConfigBtn');
+        const saveConfigBtn = document.getElementById('saveConfigBtn');
+
+        closeConfigModal?.addEventListener('click', () => {
+            this.hideConfigModal();
         });
 
-        // Drag & Drop
-        this.setupDragAndDrop();
+        cancelConfigBtn?.addEventListener('click', () => {
+            this.hideConfigModal();
+        });
 
-        // Keyboard Shortcuts
-        document.addEventListener('keydown', (e) => {
-            this.handleKeyboardShortcuts(e);
+        saveConfigBtn?.addEventListener('click', () => {
+            this.saveWidgetConfig();
+        });
+
+        // Close modals on outside click
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                this.hideAllModals();
+            }
         });
     }
 
-    setupDragAndDrop() {
-        const widgetsGrid = document.getElementById('widgetsGrid');
-        if (!widgetsGrid) return;
-
-        // Drag über Grid
-        widgetsGrid.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
+    initializeContextMenuEvents() {
+        const contextMenu = document.getElementById('widgetContextMenu');
+        
+        // Right-click auf Widgets
+        document.addEventListener('contextmenu', (e) => {
+            const widget = e.target.closest('.widget');
+            if (widget) {
+                e.preventDefault();
+                this.showContextMenu(e.clientX, e.clientY, widget.dataset.widgetId);
+            }
         });
 
-        // Drop auf Grid
-        widgetsGrid.addEventListener('drop', (e) => {
-            e.preventDefault();
-            if (this.draggedWidget) {
-                this.handleWidgetDrop(e);
+        // Context Menu Actions
+        contextMenu?.addEventListener('click', (e) => {
+            const item = e.target.closest('.context-menu-item');
+            if (item) {
+                const action = item.dataset.action;
+                const widgetId = contextMenu.dataset.widgetId;
+                this.handleContextMenuAction(action, widgetId);
+                this.hideContextMenu();
             }
+        });
+
+        // Hide context menu on outside click
+        document.addEventListener('click', () => {
+            this.hideContextMenu();
+        });
+    }
+
+    initializeDragAndDrop() {
+        const container = document.getElementById('widgetsContainer');
+        
+        container.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            const afterElement = this.getDragAfterElement(container, e.clientY);
+            const dragging = document.querySelector('.dragging');
+            
+            if (afterElement == null) {
+                container.appendChild(dragging);
+            } else {
+                container.insertBefore(dragging, afterElement);
+            }
+        });
+
+        container.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.saveDragOrder();
         });
     }
 
     // ========================================
-    // WIDGET-VERWALTUNG
+    // WIDGET LIFECYCLE
     // ========================================
 
     async loadUserWidgets() {
         try {
-            this.showLoading('Widgets werden geladen...');
-            
             const response = await fetch('/api/widgets', {
-                method: 'GET',
                 headers: this.getAuthHeaders()
             });
 
             if (response.ok) {
                 const data = await response.json();
-                const widgets = data.widgets || [];
-                
-                console.log(`📦 ${widgets.length} Widgets geladen`);
-                
-                if (widgets.length === 0) {
-                    this.showEmptyState();
-                } else {
-                    this.hideEmptyState();
-                    widgets.forEach(widget => this.addWidgetToDOM(widget));
-                }
+                this.renderWidgets(data.widgets || []);
             } else {
-                console.error('Fehler beim Laden der Widgets:', response.statusText);
-                this.showEmptyState();
+                this.checkEmptyState();
             }
         } catch (error) {
-            console.error('Fehler beim Laden der Widgets:', error);
-            this.showToast('Fehler beim Laden der Widgets', 'error');
-            this.showEmptyState();
-        } finally {
-            this.hideLoading();
+            console.error('Error loading widgets:', error);
+            this.checkEmptyState();
         }
     }
 
     async createWidget(type, config = {}) {
+        const widgetType = this.widgetTypes.get(type);
+        if (!widgetType) {
+            this.showToast('Unbekannter Widget-Typ', 'error');
+            return;
+        }
+
+        const widgetData = {
+            type: type,
+            title: config.title || widgetType.name,
+            config: { ...widgetType.defaultConfig, ...config },
+            position: this.getNextPosition()
+        };
+
         try {
-            const widgetType = this.widgetTypes.get(type);
-            if (!widgetType) {
-                throw new Error(`Widget-Typ ${type} nicht gefunden`);
-            }
-
-            this.showLoading('Widget wird erstellt...');
-
-            // Freie Position finden
-            const position = this.findFreePosition(widgetType.defaultSize);
-
             const response = await fetch('/api/widgets', {
                 method: 'POST',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify({
-                    type,
-                    title: config.title || widgetType.name,
-                    config: { ...widgetType.config, ...config },
-                    position
-                })
+                headers: {
+                    ...this.getAuthHeaders(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(widgetData)
             });
 
             if (response.ok) {
                 const data = await response.json();
-                if (data.success) {
-                    this.hideEmptyState();
-                    const widget = this.addWidgetToDOM(data.widget);
-                    this.showToast(`${widgetType.name} erfolgreich erstellt!`, 'success');
-                    return widget;
-                }
+                this.addWidgetToDOM(data.widget);
+                this.showToast('Widget erfolgreich hinzugefügt', 'success');
+                this.checkEmptyState();
             } else {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Fehler beim Erstellen des Widgets');
+                throw new Error('Failed to create widget');
             }
         } catch (error) {
             console.error('Error creating widget:', error);
-            this.showToast(error.message, 'error');
-            throw error;
-        } finally {
-            this.hideLoading();
+            this.showToast('Fehler beim Erstellen des Widgets', 'error');
         }
+    }
+
+    renderWidgets(widgetsData) {
+        const container = document.getElementById('widgetsContainer');
+        const emptyState = document.getElementById('widgetsEmpty');
+        
+        // Clear existing widgets
+        container.querySelectorAll('.widget').forEach(widget => widget.remove());
+
+        if (widgetsData.length === 0) {
+            emptyState.style.display = 'flex';
+            return;
+        }
+
+        emptyState.style.display = 'none';
+
+        // Sort by position and add to DOM
+        widgetsData
+            .sort((a, b) => a.position - b.position)
+            .forEach(widgetData => {
+                this.addWidgetToDOM(widgetData);
+            });
     }
 
     addWidgetToDOM(widgetData) {
+        const container = document.getElementById('widgetsContainer');
+        const widgetElement = this.createWidgetElement(widgetData);
+        
+        container.appendChild(widgetElement);
+        
+        // Initialize widget instance
+        this.initializeWidget(widgetData);
+        
+        // Add drag functionality
+        this.makeDraggable(widgetElement);
+    }
+
+    createWidgetElement(widgetData) {
         const widgetType = this.widgetTypes.get(widgetData.type);
-        if (!widgetType) {
-            console.error(`Unbekannter Widget-Typ: ${widgetData.type}`);
-            return null;
-        }
-
-        const container = document.getElementById('widgetsGrid');
+        const element = document.createElement('div');
         
-        const widgetElement = document.createElement('div');
-        widgetElement.className = 'widget-container new';
-        widgetElement.id = `widget-${widgetData._id}`;
-        widgetElement.dataset.widgetId = widgetData._id;
-        widgetElement.dataset.widgetType = widgetData.type;
-        widgetElement.dataset.category = widgetType.category;
-        widgetElement.draggable = true;
-
-        // Widget-Header erstellen
-        const header = this.createWidgetHeader(widgetData, widgetType);
+        element.className = 'widget';
+        element.dataset.widgetId = widgetData._id;
+        element.dataset.widgetType = widgetData.type;
+        element.draggable = true;
         
-        // Widget-Content erstellen
-        const content = document.createElement('div');
-        content.className = 'widget-content';
-        content.id = `widget-content-${widgetData._id}`;
+        element.innerHTML = `
+            <div class="widget-header">
+                <div class="widget-title">
+                    <span class="widget-icon">${widgetType.icon}</span>
+                    <span class="widget-name">${widgetData.title}</span>
+                </div>
+                <div class="widget-actions">
+                    <button class="widget-action-btn" data-action="refresh" title="Aktualisieren">
+                        🔄
+                    </button>
+                    <button class="widget-action-btn" data-action="configure" title="Konfigurieren">
+                        ⚙️
+                    </button>
+                    <button class="widget-action-btn widget-menu-btn" data-action="menu" title="Mehr">
+                        ⋮
+                    </button>
+                </div>
+            </div>
+            <div class="widget-content" id="widget-content-${widgetData._id}">
+                <div class="widget-loading">
+                    <div class="loading-spinner"></div>
+                    <p>Widget wird geladen...</p>
+                </div>
+            </div>
+        `;
 
-        widgetElement.appendChild(header);
-        widgetElement.appendChild(content);
-
-        // Drag Events
-        this.setupWidgetDragEvents(widgetElement);
-
-        // Widget zu DOM hinzufügen
-        const placeholder = document.getElementById('addWidgetPlaceholder');
-        if (placeholder) {
-            container.insertBefore(widgetElement, placeholder);
-        } else {
-            container.appendChild(widgetElement);
-        }
-
-        // Widget-Komponente initialisieren
-        try {
-            const WidgetComponent = widgetType.component;
-            if (WidgetComponent) {
-                const widget = new WidgetComponent(content, widgetData, this);
-                this.widgets.set(widgetData._id, widget);
-                
-                // Animation entfernen nach Abschluss
-                setTimeout(() => {
-                    widgetElement.classList.remove('new');
-                }, 500);
-                
-                return widget;
-            } else {
-                console.warn(`Widget-Komponente für ${widgetData.type} nicht gefunden`);
-                this.createFallbackWidget(content, widgetData);
+        // Widget Action Events
+        element.addEventListener('click', (e) => {
+            const actionBtn = e.target.closest('.widget-action-btn');
+            if (actionBtn) {
+                e.stopPropagation();
+                const action = actionBtn.dataset.action;
+                this.handleWidgetAction(action, widgetData._id);
             }
+        });
+
+        return element;
+    }
+
+    initializeWidget(widgetData) {
+        try {
+            let widgetInstance;
+            
+            switch (widgetData.type) {
+                case 'pomodoro':
+                    widgetInstance = new PomodoroWidget(widgetData._id, widgetData.config);
+                    break;
+                case 'todo':
+                    widgetInstance = new TodoWidget(widgetData._id, widgetData.config);
+                    break;
+                case 'notes':
+                    widgetInstance = new NotesWidget(widgetData._id, widgetData.config);
+                    break;
+                case 'weather':
+                    widgetInstance = new WeatherWidget(widgetData._id, widgetData.config);
+                    break;
+                case 'calendar':
+                    widgetInstance = new CalendarWidget(widgetData._id, widgetData.config);
+                    break;
+                case 'news':
+                    widgetInstance = new NewsWidget(widgetData._id, widgetData.config);
+                    break;
+                case 'quickchat':
+                    widgetInstance = new QuickChatWidget(widgetData._id, widgetData.config);
+                    break;
+                case 'profiles':
+                    widgetInstance = new ProfilesWidget(widgetData._id, widgetData.config);
+                    break;
+                default:
+                    throw new Error(`Unknown widget type: ${widgetData.type}`);
+            }
+            
+            this.widgets.set(widgetData._id, widgetInstance);
+            
         } catch (error) {
-            console.error(`Fehler beim Initialisieren des Widgets ${widgetData.type}:`, error);
-            this.createFallbackWidget(content, widgetData);
+            console.error('Error initializing widget:', error);
+            this.showWidgetError(widgetData._id, 'Widget konnte nicht geladen werden');
         }
-
-        return null;
-    }
-
-    createWidgetHeader(widgetData, widgetType) {
-        const header = document.createElement('div');
-        header.className = 'widget-header';
-        
-        header.innerHTML = `
-            <div class="widget-title">
-                <span class="widget-icon">${widgetType.icon}</span>
-                <span class="widget-name">${widgetData.title}</span>
-            </div>
-            <div class="widget-controls">
-                <button class="widget-btn refresh-btn" 
-                        onclick="widgetManager.refreshWidget('${widgetData._id}')" 
-                        title="Aktualisieren">🔄</button>
-                <button class="widget-btn config-btn" 
-                        onclick="widgetManager.configureWidget('${widgetData._id}')" 
-                        title="Konfigurieren">⚙️</button>
-                <button class="widget-btn delete-btn" 
-                        onclick="widgetManager.deleteWidget('${widgetData._id}')" 
-                        title="Löschen">🗑️</button>
-            </div>
-        `;
-
-        return header;
-    }
-
-    createFallbackWidget(container, widgetData) {
-        container.innerHTML = `
-            <div class="widget-fallback">
-                <div class="fallback-icon">⚠️</div>
-                <h4>Widget nicht verfügbar</h4>
-                <p>Das Widget "${widgetData.type}" konnte nicht geladen werden.</p>
-                <button class="btn-secondary" onclick="widgetManager.deleteWidget('${widgetData._id}')">
-                    Widget entfernen
-                </button>
-            </div>
-        `;
-    }
-
-    setupWidgetDragEvents(element) {
-        element.addEventListener('dragstart', (e) => {
-            this.draggedWidget = element.dataset.widgetId;
-            element.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/html', element.outerHTML);
-        });
-
-        element.addEventListener('dragend', () => {
-            element.classList.remove('dragging');
-            this.draggedWidget = null;
-        });
     }
 
     // ========================================
-    // WIDGET-AKTIONEN
+    // WIDGET ACTIONS
     // ========================================
+
+    handleWidgetAction(action, widgetId) {
+        switch (action) {
+            case 'refresh':
+                this.refreshWidget(widgetId);
+                break;
+            case 'configure':
+                this.configureWidget(widgetId);
+                break;
+            case 'menu':
+                // Context menu über Button
+                const widget = document.querySelector(`[data-widget-id="${widgetId}"]`);
+                const menuBtn = widget.querySelector('[data-action="menu"]');
+                const rect = menuBtn.getBoundingClientRect();
+                this.showContextMenu(rect.right - 10, rect.bottom + 5, widgetId);
+                break;
+        }
+    }
 
     async refreshWidget(widgetId) {
         const widget = this.widgets.get(widgetId);
@@ -556,7 +521,7 @@ class WidgetManager {
             });
 
             if (response.ok) {
-                const element = document.getElementById(`widget-${widgetId}`);
+                const element = document.querySelector(`[data-widget-id="${widgetId}"]`);
                 if (element) {
                     element.style.animation = 'widgetSlideOut 0.3s ease-in forwards';
                     setTimeout(() => {
@@ -593,682 +558,356 @@ class WidgetManager {
     }
 
     // ========================================
-    // WIDGET-AUSWAHL & KONFIGURATION
+    // MODAL MANAGEMENT
     // ========================================
 
-    openWidgetSelector() {
+    showWidgetSelectionModal() {
         const modal = document.getElementById('widgetSelectionModal');
-        const grid = document.getElementById('widgetCategoriesGrid');
-        
-        if (!modal || !grid) return;
-
-        // Kategorien gruppieren
-        const categories = this.groupWidgetsByCategory();
-        
-        grid.innerHTML = '';
-        
-        categories.forEach((widgets, category) => {
-            const categoryElement = this.createCategoryElement(category, widgets);
-            grid.appendChild(categoryElement);
-        });
-
-        this.showModal('widgetSelectionModal');
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
     }
 
-    groupWidgetsByCategory() {
-        const categories = new Map();
-        
-        this.widgetTypes.forEach((widget, type) => {
-            if (!categories.has(widget.category)) {
-                categories.set(widget.category, []);
-            }
-            categories.get(widget.category).push({ type, ...widget });
-        });
-
-        return categories;
+    hideWidgetSelectionModal() {
+        const modal = document.getElementById('widgetSelectionModal');
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
     }
 
-    createCategoryElement(category, widgets) {
-        const categoryInfo = this.getCategoryInfo(category);
+    openConfigModal(widgetId, widgetData, widgetType) {
+        const modal = document.getElementById('widgetConfigModal');
+        const modalBody = document.getElementById('configModalBody');
         
-        const element = document.createElement('div');
-        element.className = 'widget-category';
+        // Store current widget ID for saving
+        modal.dataset.widgetId = widgetId;
         
-        const widgetList = widgets.map(widget => `
-            <div class="widget-option" onclick="widgetManager.selectWidget('${widget.type}')">
-                <div class="widget-option-icon">${widget.icon}</div>
-                <div class="widget-option-info">
-                    <div class="widget-option-name">${widget.name}</div>
-                    <div class="widget-option-desc">${widget.description}</div>
-                </div>
-                <div class="widget-option-size">${widget.defaultSize.width}×${widget.defaultSize.height}</div>
-            </div>
-        `).join('');
-
-        element.innerHTML = `
-            <div class="category-header">
-                <div class="category-icon">${categoryInfo.icon}</div>
-                <div class="category-info">
-                    <h4>${categoryInfo.name}</h4>
-                    <p>${categoryInfo.description}</p>
-                </div>
-            </div>
-            <div class="widget-list">
-                ${widgetList}
-            </div>
-        `;
-
-        return element;
+        // Generate configuration form
+        modalBody.innerHTML = this.generateConfigForm(widgetType, widgetData.config);
+        
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
     }
 
-    getCategoryInfo(category) {
-        const categoryMap = {
-            'productivity': {
-                name: 'Produktivität',
-                description: 'Tools für effizientes Arbeiten',
-                icon: '⚡'
-            },
-            'health': {
-                name: 'Gesundheit',
-                description: 'Gesundheits- und Fitness-Tracking',
-                icon: '🏥'
-            },
-            'finance': {
-                name: 'Finanzen',
-                description: 'Budget und Investitionen verwalten',
-                icon: '💰'
-            },
-            'learning': {
-                name: 'Lernen',
-                description: 'Bildung und Wissenserwerb',
-                icon: '📚'
-            },
-            'social': {
-                name: 'Sozial',
-                description: 'Kontakte und Beziehungen pflegen',
-                icon: '👥'
-            },
-            'smart-home': {
-                name: 'Smart Home',
-                description: 'Hausautomation und IoT-Geräte',
-                icon: '🏠'
-            }
-        };
-
-        return categoryMap[category] || {
-            name: category,
-            description: 'Verschiedene Tools',
-            icon: '🧩'
-        };
+    hideConfigModal() {
+        const modal = document.getElementById('widgetConfigModal');
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+        delete modal.dataset.widgetId;
     }
 
-    async selectWidget(type) {
-        this.closeWidgetSelector();
+    hideAllModals() {
+        this.hideWidgetSelectionModal();
+        this.hideConfigModal();
+    }
+
+    // ========================================
+    // CONTEXT MENU
+    // ========================================
+
+    showContextMenu(x, y, widgetId) {
+        const contextMenu = document.getElementById('widgetContextMenu');
+        contextMenu.dataset.widgetId = widgetId;
+        contextMenu.style.display = 'block';
         
-        try {
-            await this.createWidget(type);
-        } catch (error) {
-            // Fehler wird bereits in createWidget behandelt
+        // Position menu
+        const rect = contextMenu.getBoundingClientRect();
+        const maxX = window.innerWidth - rect.width - 10;
+        const maxY = window.innerHeight - rect.height - 10;
+        
+        contextMenu.style.left = Math.min(x, maxX) + 'px';
+        contextMenu.style.top = Math.min(y, maxY) + 'px';
+    }
+
+    hideContextMenu() {
+        const contextMenu = document.getElementById('widgetContextMenu');
+        contextMenu.style.display = 'none';
+        delete contextMenu.dataset.widgetId;
+    }
+
+    handleContextMenuAction(action, widgetId) {
+        switch (action) {
+            case 'refresh':
+                this.refreshWidget(widgetId);
+                break;
+            case 'configure':
+                this.configureWidget(widgetId);
+                break;
+            case 'duplicate':
+                this.duplicateWidget(widgetId);
+                break;
+            case 'delete':
+                this.deleteWidget(widgetId);
+                break;
         }
     }
 
     // ========================================
-    // KONFIGURATION & MODALS
+    // UTILITY METHODS
     // ========================================
 
-    openConfigModal(widgetId, widgetData, widgetType) {
-        const modal = document.getElementById('widgetConfigModal');
-        const title = document.getElementById('configModalTitle');
-        const content = document.getElementById('widgetConfigContent');
+    selectWidgetType(type) {
+        this.hideWidgetSelectionModal();
         
-        if (!modal || !title || !content) return;
-
-        title.textContent = `${widgetType.name} konfigurieren`;
-        
-        // Konfigurationsformular erstellen
-        content.innerHTML = this.createConfigForm(widgetData, widgetType);
-        
-        // Widget-ID für speichern merken
-        modal.dataset.widgetId = widgetId;
-        
-        this.showModal('widgetConfigModal');
+        const widgetType = this.widgetTypes.get(type);
+        if (widgetType.configFields.length > 0) {
+            // Show configuration modal first
+            this.openConfigModal('new', { type, config: widgetType.defaultConfig }, widgetType);
+        } else {
+            // Create widget directly
+            this.createWidget(type);
+        }
     }
 
-    createConfigForm(widgetData, widgetType) {
-        const config = widgetType.config || {};
-        const currentConfig = widgetData.config || {};
+    generateConfigForm(widgetType, currentConfig) {
+        let html = `<h4>${widgetType.name} konfigurieren</h4>`;
         
-        const sections = Object.entries(config).map(([key, field]) => {
-            const currentValue = currentConfig[key] ?? field.default;
+        widgetType.configFields.forEach(field => {
+            const value = currentConfig[field.key] ?? field.default ?? '';
             
-            let inputHtml = '';
+            html += `<div class="config-field">`;
+            html += `<label class="config-label">${field.label}</label>`;
             
             switch (field.type) {
-                case 'boolean':
-                    inputHtml = `
-                        <div class="config-toggle">
-                            <div class="toggle-switch ${currentValue ? 'active' : ''}" 
-                                 onclick="this.classList.toggle('active')" 
-                                 data-key="${key}">
-                                <div class="toggle-slider"></div>
-                            </div>
-                            <span>${currentValue ? 'Aktiviert' : 'Deaktiviert'}</span>
-                        </div>
-                    `;
+                case 'text':
+                    html += `<input type="text" class="config-input" data-key="${field.key}" value="${value}">`;
                     break;
-                    
-                case 'select':
-                    const options = field.options.map(option => 
-                        `<option value="${option}" ${option === currentValue ? 'selected' : ''}>${option}</option>`
-                    ).join('');
-                    inputHtml = `<select class="config-input" data-key="${key}">${options}</select>`;
-                    break;
-                    
                 case 'number':
-                    inputHtml = `<input type="number" class="config-input" data-key="${key}" value="${currentValue}">`;
+                    html += `<input type="number" class="config-input" data-key="${field.key}" 
+                            value="${value}" min="${field.min || 0}" max="${field.max || 100}">`;
                     break;
-                    
-                default:
-                    inputHtml = `<input type="text" class="config-input" data-key="${key}" value="${currentValue}">`;
+                case 'boolean':
+                    html += `<div class="config-toggle">
+                        <div class="toggle-switch ${value ? 'active' : ''}" data-key="${field.key}">
+                            <div class="toggle-slider"></div>
+                        </div>
+                        <span>${value ? 'Ein' : 'Aus'}</span>
+                    </div>`;
+                    break;
+                case 'select':
+                    html += `<select class="config-input" data-key="${field.key}">`;
+                    field.options.forEach(option => {
+                        const selected = option === value ? 'selected' : '';
+                        html += `<option value="${option}" ${selected}>${option}</option>`;
+                    });
+                    html += `</select>`;
+                    break;
             }
             
-            return `
-                <div class="config-row">
-                    <div class="config-label">
-                        ${field.label}
-                        ${field.description ? `<div class="config-label-desc">${field.description}</div>` : ''}
-                    </div>
-                    <div class="config-control">
-                        ${inputHtml}
-                    </div>
-                </div>
-            `;
-        }).join('');
+            html += `</div>`;
+        });
 
-        return `
-            <div class="config-section">
-                <h4>⚙️ Widget-Einstellungen</h4>
-                ${sections}
-            </div>
-        `;
+        // Add event listeners for toggle switches
+        setTimeout(() => {
+            document.querySelectorAll('.toggle-switch').forEach(toggle => {
+                toggle.addEventListener('click', () => {
+                    toggle.classList.toggle('active');
+                    const span = toggle.nextElementSibling;
+                    span.textContent = toggle.classList.contains('active') ? 'Ein' : 'Aus';
+                });
+            });
+        }, 0);
+
+        return html;
     }
 
     async saveWidgetConfig() {
         const modal = document.getElementById('widgetConfigModal');
-        const widgetId = modal?.dataset.widgetId;
+        const widgetId = modal.dataset.widgetId;
         
-        if (!widgetId) return;
-
-        try {
-            const config = this.collectConfigData();
-            
-            const response = await fetch(`/api/widgets/${widgetId}/config`, {
-                method: 'PATCH',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify({ config })
-            });
-
-            if (response.ok) {
-                const widget = this.widgets.get(widgetId);
-                if (widget && typeof widget.updateConfig === 'function') {
-                    widget.updateConfig(config);
-                }
-                
-                this.closeConfigModal();
-                this.showToast('Konfiguration gespeichert', 'success');
-            } else {
-                throw new Error('Fehler beim Speichern der Konfiguration');
-            }
-        } catch (error) {
-            console.error('Error saving config:', error);
-            this.showToast('Fehler beim Speichern der Konfiguration', 'error');
-        }
-    }
-
-    collectConfigData() {
+        // Collect configuration data
         const config = {};
         
-        // Text/Number Inputs
-        document.querySelectorAll('.config-input').forEach(input => {
+        modal.querySelectorAll('.config-input').forEach(input => {
             const key = input.dataset.key;
-            config[key] = input.type === 'number' ? parseFloat(input.value) : input.value;
+            let value = input.value;
+            
+            if (input.type === 'number') {
+                value = parseInt(value);
+            }
+            
+            config[key] = value;
         });
-        
-        // Toggle Switches
-        document.querySelectorAll('.toggle-switch').forEach(toggle => {
+
+        modal.querySelectorAll('.toggle-switch').forEach(toggle => {
             const key = toggle.dataset.key;
             config[key] = toggle.classList.contains('active');
         });
 
-        return config;
-    }
-
-    // ========================================
-    // FILTER & SORTIERUNG
-    // ========================================
-
-    setFilter(category) {
-        this.currentFilter = category;
-        
-        // Tab-Status aktualisieren
-        document.querySelectorAll('.filter-tab').forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.category === category);
-        });
-        
-        // Widgets filtern
-        document.querySelectorAll('.widget-container').forEach(widget => {
-            const widgetCategory = widget.dataset.category;
-            const shouldShow = category === 'all' || widgetCategory === category;
-            
-            widget.style.display = shouldShow ? 'flex' : 'none';
-        });
-    }
-
-    sortWidgets(sortBy) {
-        const grid = document.getElementById('widgetsGrid');
-        const widgets = Array.from(grid.querySelectorAll('.widget-container:not(#addWidgetPlaceholder)'));
-        
-        widgets.sort((a, b) => {
-            switch (sortBy) {
-                case 'alphabetical':
-                    const nameA = a.querySelector('.widget-name')?.textContent || '';
-                    const nameB = b.querySelector('.widget-name')?.textContent || '';
-                    return nameA.localeCompare(nameB);
-                    
-                case 'category':
-                    const catA = a.dataset.category || '';
-                    const catB = b.dataset.category || '';
-                    return catA.localeCompare(catB);
-                    
-                case 'size':
-                    // Größe basierend auf Element-Dimensionen
-                    const sizeA = a.offsetWidth * a.offsetHeight;
-                    const sizeB = b.offsetWidth * b.offsetHeight;
-                    return sizeB - sizeA;
-                    
-                default: // recent
-                    // Basierend auf DOM-Reihenfolge (neueste zuerst)
-                    return 0;
-            }
-        });
-        
-        // Widgets neu anordnen
-        widgets.forEach(widget => grid.appendChild(widget));
-        
-        // Placeholder am Ende
-        const placeholder = document.getElementById('addWidgetPlaceholder');
-        if (placeholder) {
-            grid.appendChild(placeholder);
-        }
-    }
-
-    // ========================================
-    // LAYOUT & DRAG/DROP
-    // ========================================
-
-    toggleLayoutMode() {
-        this.isLayoutMode = !this.isLayoutMode;
-        const grid = document.getElementById('widgetsGrid');
-        const btn = document.getElementById('layoutModeBtn');
-        
-        if (this.isLayoutMode) {
-            grid.classList.add('layout-mode');
-            btn.innerHTML = '<span class="icon">✅</span><span>Layout speichern</span>';
-            this.showToast('Layout-Bearbeitungsmodus aktiviert', 'info');
-        } else {
-            grid.classList.remove('layout-mode');
-            btn.innerHTML = '<span class="icon">📐</span><span>Layout bearbeiten</span>';
-            this.saveLayout();
-            this.showToast('Layout gespeichert', 'success');
-        }
-    }
-
-    findFreePosition(size) {
-        // Vereinfachte Positionsfindung - könnte erweitert werden
-        return {
-            x: 0,
-            y: 0,
-            width: size.width,
-            height: size.height
-        };
-    }
-
-    handleWidgetDrop(e) {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        // Neue Position berechnen und Widget verschieben
-        // Implementation abhängig von gewähltem Layout-System
-        console.log(`Widget dropped at ${x}, ${y}`);
-    }
-
-    async saveLayout() {
-        const layout = this.getCurrentLayout();
-        
         try {
-            const response = await fetch('/api/widgets/layout', {
-                method: 'POST',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify({ layout })
-            });
+            if (widgetId === 'new') {
+                // Create new widget
+                const type = modal.dataset.widgetType || 'pomodoro';
+                await this.createWidget(type, config);
+            } else {
+                // Update existing widget
+                const response = await fetch(`/api/widgets/${widgetId}`, {
+                    method: 'PUT',
+                    headers: {
+                        ...this.getAuthHeaders(),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ config })
+                });
 
-            if (!response.ok) {
-                throw new Error('Fehler beim Speichern des Layouts');
-            }
-        } catch (error) {
-            console.error('Error saving layout:', error);
-            this.showToast('Fehler beim Speichern des Layouts', 'error');
-        }
-    }
-
-    getCurrentLayout() {
-        const widgets = [];
-        
-        document.querySelectorAll('.widget-container[data-widget-id]').forEach((element, index) => {
-            widgets.push({
-                widgetId: element.dataset.widgetId,
-                position: {
-                    order: index,
-                    x: element.offsetLeft,
-                    y: element.offsetTop,
-                    width: element.offsetWidth,
-                    height: element.offsetHeight
+                if (response.ok) {
+                    // Update widget instance
+                    const widget = this.widgets.get(widgetId);
+                    if (widget && typeof widget.updateConfig === 'function') {
+                        widget.updateConfig(config);
+                    }
+                    this.showToast('Widget-Konfiguration gespeichert', 'success');
+                } else {
+                    throw new Error('Failed to update widget');
                 }
-            });
-        });
-
-        return widgets;
-    }
-
-    // ========================================
-    // KONTEXTMENÜ
-    // ========================================
-
-    showContextMenu(e, widgetId) {
-        const menu = document.getElementById('widgetContextMenu');
-        if (!menu) return;
-
-        this.contextMenuWidget = widgetId;
-        
-        menu.style.left = `${e.pageX}px`;
-        menu.style.top = `${e.pageY}px`;
-        menu.classList.remove('hidden');
-        
-        // Position anpassen falls außerhalb des Viewports
-        const rect = menu.getBoundingClientRect();
-        if (rect.right > window.innerWidth) {
-            menu.style.left = `${e.pageX - rect.width}px`;
+            }
+            
+            this.hideConfigModal();
+        } catch (error) {
+            console.error('Error saving widget config:', error);
+            this.showToast('Fehler beim Speichern der Konfiguration', 'error');
         }
-        if (rect.bottom > window.innerHeight) {
-            menu.style.top = `${e.pageY - rect.height}px`;
-        }
-    }
-
-    hideContextMenu() {
-        const menu = document.getElementById('widgetContextMenu');
-        if (menu) {
-            menu.classList.add('hidden');
-        }
-        this.contextMenuWidget = null;
-    }
-
-    // Kontextmenü-Aktionen (werden von HTML onClick aufgerufen)
-    refreshWidget() {
-        if (this.contextMenuWidget) {
-            this.refreshWidget(this.contextMenuWidget);
-        }
-        this.hideContextMenu();
-    }
-
-    configureWidget() {
-        if (this.contextMenuWidget) {
-            this.configureWidget(this.contextMenuWidget);
-        }
-        this.hideContextMenu();
-    }
-
-    resizeWidget() {
-        if (this.contextMenuWidget) {
-            // Widget-Resize-Modus aktivieren
-            this.showToast('Resize-Funktion noch nicht implementiert', 'info');
-        }
-        this.hideContextMenu();
-    }
-
-    duplicateWidget() {
-        if (this.contextMenuWidget) {
-            this.duplicateWidget(this.contextMenuWidget);
-        }
-        this.hideContextMenu();
-    }
-
-    exportWidget() {
-        if (this.contextMenuWidget) {
-            this.exportWidgetData(this.contextMenuWidget);
-        }
-        this.hideContextMenu();
-    }
-
-    deleteWidget() {
-        if (this.contextMenuWidget) {
-            this.deleteWidget(this.contextMenuWidget);
-        }
-        this.hideContextMenu();
-    }
-
-    // ========================================
-    // HILFSFUNKTIONEN
-    // ========================================
-
-    getAuthHeaders() {
-        return {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('allKiAuthToken')}`,
-            'X-User-Email': localStorage.getItem('allKiUserEmail')
-        };
     }
 
     getWidgetData(widgetId) {
-        const element = document.getElementById(`widget-${widgetId}`);
+        const element = document.querySelector(`[data-widget-id="${widgetId}"]`);
         if (!element) return null;
-
-        // Widget-Daten aus DOM oder Cache holen
+        
         return {
             _id: widgetId,
             type: element.dataset.widgetType,
-            title: element.querySelector('.widget-name')?.textContent,
-            config: {} // Könnte aus Widget-Instanz geholt werden
+            title: element.querySelector('.widget-name').textContent,
+            config: this.widgets.get(widgetId)?.config || {}
         };
     }
 
-    setupAutoRefresh() {
-        // Auto-Refresh alle 5 Minuten
-        this.refreshInterval = setInterval(() => {
-            if (!document.hidden) { // Nur wenn Tab aktiv ist
-                this.refreshAllWidgets();
-            }
-        }, 5 * 60 * 1000);
-    }
-
-    handleKeyboardShortcuts(e) {
-        // Keyboard Shortcuts
-        if (e.ctrlKey || e.metaKey) {
-            switch (e.key) {
-                case 'n':
-                    e.preventDefault();
-                    this.openWidgetSelector();
-                    break;
-                case 'r':
-                    e.preventDefault();
-                    this.refreshAllWidgets();
-                    break;
-                case 'e':
-                    e.preventDefault();
-                    this.toggleLayoutMode();
-                    break;
-            }
-        }
-        
-        if (e.key === 'Escape') {
-            this.closeAllModals();
-        }
-    }
-
-    exportWidgetData(widgetId) {
-        const widgetData = this.getWidgetData(widgetId);
-        if (!widgetData) return;
-
-        const exportData = {
-            ...widgetData,
-            exportedAt: new Date().toISOString(),
-            exportedBy: localStorage.getItem('allKiUserEmail')
-        };
-
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-            type: 'application/json'
-        });
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `widget-${widgetData.type}-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        this.showToast('Widget exportiert', 'success');
-    }
-
-    // ========================================
-    // UI STATE MANAGEMENT
-    // ========================================
-
-    showEmptyState() {
-        const placeholder = document.getElementById('addWidgetPlaceholder');
-        if (placeholder) {
-            placeholder.style.display = 'flex';
-        }
-    }
-
-    hideEmptyState() {
-        const placeholder = document.getElementById('addWidgetPlaceholder');
-        if (placeholder && this.widgets.size > 0) {
-            placeholder.style.display = 'none';
-        }
+    getNextPosition() {
+        const widgets = document.querySelectorAll('.widget');
+        return widgets.length;
     }
 
     checkEmptyState() {
-        if (this.widgets.size === 0) {
-            this.showEmptyState();
+        const widgets = document.querySelectorAll('.widget');
+        const emptyState = document.getElementById('widgetsEmpty');
+        
+        if (widgets.length === 0) {
+            emptyState.style.display = 'flex';
+        } else {
+            emptyState.style.display = 'none';
         }
     }
 
-    showLoading(message = 'Laden...') {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            overlay.querySelector('p').textContent = message;
-            overlay.classList.remove('hidden');
-        }
-    }
+    // ========================================
+    // DRAG & DROP
+    // ========================================
 
-    hideLoading() {
-        const overlay = document.getElementById('loadingOverlay');
-        if (overlay) {
-            overlay.classList.add('hidden');
-        }
-    }
-
-    showModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
-        }
-    }
-
-    closeModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.add('hidden');
-            document.body.style.overflow = 'auto';
-        }
-    }
-
-    closeAllModals() {
-        document.querySelectorAll('.modal-overlay').forEach(modal => {
-            modal.classList.add('hidden');
+    makeDraggable(element) {
+        element.addEventListener('dragstart', (e) => {
+            this.draggedWidget = element;
+            element.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', element.outerHTML);
         });
-        document.body.style.overflow = 'auto';
+
+        element.addEventListener('dragend', () => {
+            element.classList.remove('dragging');
+            this.draggedWidget = null;
+        });
     }
 
-    // Modal-spezifische Methoden
-    closeWidgetSelector() {
-        this.closeModal('widgetSelectionModal');
+    getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('.widget:not(.dragging)')];
+        
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
-    closeConfigModal() {
-        this.closeModal('widgetConfigModal');
+    async saveDragOrder() {
+        const widgets = document.querySelectorAll('.widget');
+        const order = Array.from(widgets).map((widget, index) => ({
+            id: widget.dataset.widgetId,
+            position: index
+        }));
+
+        try {
+            await fetch('/api/widgets/order', {
+                method: 'PUT',
+                headers: {
+                    ...this.getAuthHeaders(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ order })
+            });
+        } catch (error) {
+            console.error('Error saving widget order:', error);
+        }
     }
 
-    closeDetailsModal() {
-        this.closeModal('widgetDetailsModal');
+    // ========================================
+    // UTILITY & HELPERS
+    // ========================================
+
+    getAuthHeaders() {
+        const token = localStorage.getItem('allKiAuthToken');
+        const email = localStorage.getItem('allKiUserEmail');
+        
+        return {
+            'Authorization': `Bearer ${token}`,
+            'X-User-Email': email
+        };
+    }
+
+    showWidgetError(widgetId, message) {
+        const content = document.getElementById(`widget-content-${widgetId}`);
+        if (content) {
+            content.innerHTML = `
+                <div class="widget-error">
+                    <div class="error-icon">⚠️</div>
+                    <p>${message}</p>
+                    <button class="btn btn-sm btn-secondary" onclick="widgetsManager.refreshWidget('${widgetId}')">
+                        Erneut versuchen
+                    </button>
+                </div>
+            `;
+        }
     }
 
     showToast(message, type = 'info') {
-        const toastContainer = document.getElementById('toastContainer');
-        if (!toastContainer) return;
-        
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
         const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
+        toast.className = `toast toast-${type}`;
         
-        toastContainer.appendChild(toast);
-        
-        // Click to dismiss
-        toast.addEventListener('click', () => {
-            this.removeToast(toast);
-        });
-        
-        // Auto remove after 4 seconds
-        setTimeout(() => {
-            this.removeToast(toast);
-        }, 4000);
-    }
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
 
-    removeToast(toast) {
-        if (toast.parentNode) {
-            toast.style.animation = 'slideOutRight 0.3s ease-in forwards';
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-            }, 300);
-        }
-    }
+        toast.innerHTML = `
+            <span class="toast-icon">${icons[type]}</span>
+            <span class="toast-message">${message}</span>
+            <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+        `;
 
-    handleLogout() {
-        localStorage.clear();
-        this.showToast('Erfolgreich abgemeldet!', 'success');
+        container.appendChild(toast);
+
+        // Auto-remove after 5 seconds
         setTimeout(() => {
-            window.location.href = '/login.html';
-        }, 1000);
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, 5000);
     }
 }
 
-// Widget Manager global verfügbar machen
-let widgetManager;
-
-// Initialisierung wenn DOM geladen ist
-document.addEventListener('DOMContentLoaded', () => {
-    widgetManager = new WidgetManager();
-    window.widgetManager = widgetManager; // Für Console-Debugging
-});
-
-// Cleanup beim Verlassen der Seite
-window.addEventListener('beforeunload', () => {
-    if (widgetManager.refreshInterval) {
-        clearInterval(widgetManager.refreshInterval);
-    }
-});
+// Global instance
+window.widgetsManager = new WidgetsManager();

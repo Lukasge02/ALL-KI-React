@@ -58,7 +58,7 @@ router.get('/test', (req, res) => {
     res.json({ message: 'Profile routes are working!' });
 });
 
-// Get all profiles for a user (Basic version - existing)
+// Get all profiles for a user (Basic version)
 router.get('/', getUserFromToken, async (req, res) => {
     try {
         const Profile = require('../models/Profile');
@@ -79,7 +79,7 @@ router.get('/', getUserFromToken, async (req, res) => {
     }
 });
 
-// 🎯 ENHANCED PROFILES WITH LIVE STATS
+// Enhanced profiles with live stats
 router.get('/enhanced', getUserFromToken, async (req, res) => {
     try {
         const Profile = require('../models/Profile');
@@ -119,37 +119,27 @@ router.get('/enhanced', getUserFromToken, async (req, res) => {
 
             // Get recent insights from memories
             const recentInsights = profile.memories
-                ?.filter(m => m.type === 'insight' || m.importance > 0.7)
-                .sort((a, b) => b.createdAt - a.createdAt)
-                .slice(0, 3) || [];
+                ?.filter(m => m.timestamp && m.timestamp > Date.now() - 7 * 24 * 60 * 60 * 1000)
+                ?.slice(0, 3) || [];
 
             return {
                 _id: profile._id,
                 name: profile.name,
                 category: profile.category,
                 profileData: profile.profileData,
+                personality: profile.personality,
                 stats: {
-                    ...profile.stats,
                     totalChats: stats.totalChats,
                     totalMessages: stats.totalMessages,
+                    avgMessagesPerChat: Math.round(stats.avgMessagesPerChat || 0),
                     lastActivity: stats.lastChatDate,
-                    activityScore: activityScore,
-                    avgMessagesPerChat: Math.round(stats.avgMessagesPerChat || 0)
+                    activityScore: activityScore
                 },
-                personality: {
-                    type: profile.personality?.type || 'assistant',
-                    communicationStyle: profile.personality?.communicationStyle || {}
-                },
-                insights: recentInsights.map(insight => ({
-                    content: insight.content,
-                    type: insight.type,
-                    importance: insight.importance,
-                    createdAt: insight.createdAt
-                })),
+                insights: recentInsights,
                 health: {
-                    status: stats.totalMessages > 0 ? 'active' : 'inactive',
+                    status: activityScore > 0.1 ? 'active' : 'inactive',
                     engagement: activityScore > 0.5 ? 'high' : activityScore > 0.2 ? 'medium' : 'low',
-                    lastUsed: profile.stats.lastUsed || profile.updatedAt
+                    lastUsed: profile.stats?.lastUsed || profile.updatedAt
                 },
                 createdAt: profile.createdAt,
                 updatedAt: profile.updatedAt
@@ -223,66 +213,24 @@ router.get('/:profileId/details', getUserFromToken, async (req, res) => {
         const conversationAnalysis = {
             totalChats: chats.length,
             totalMessages: chats.reduce((sum, chat) => sum + chat.messages.length, 0),
-            avgSessionLength: chats.length > 0 ? 
-                chats.reduce((sum, chat) => sum + chat.messages.length, 0) / chats.length : 0,
-            topicDistribution: {},
-            moodTrends: [],
-            engagementScore: 0
+            avgSessionLength: chats.length > 0 
+                ? chats.reduce((sum, chat) => sum + chat.messages.length, 0) / chats.length
+                : 0,
+            recentActivity: chats.filter(chat => 
+                chat.updatedAt > Date.now() - 7 * 24 * 60 * 60 * 1000
+            ).length
         };
 
-        // Calculate engagement over time
-        const last30Days = chats.filter(chat => 
-            (Date.now() - chat.updatedAt) < 30 * 24 * 60 * 60 * 1000
-        );
-        conversationAnalysis.engagementScore = Math.min(1, last30Days.length / 10);
-
-        // Memory insights
-        const memoryInsights = {
-            totalMemories: profile.memories?.length || 0,
-            memoryTypes: {},
-            importantMemories: profile.memories
-                ?.filter(m => m.importance > 0.7)
-                .sort((a, b) => b.importance - a.importance)
-                .slice(0, 5) || [],
-            recentMemories: profile.memories
-                ?.sort((a, b) => b.createdAt - a.createdAt)
-                .slice(0, 10) || []
-        };
-
-        // Count memory types
-        if (profile.memories) {
-            profile.memories.forEach(memory => {
-                memoryInsights.memoryTypes[memory.type] = 
-                    (memoryInsights.memoryTypes[memory.type] || 0) + 1;
-            });
-        }
-
-        // Goal progress analysis
-        const goalProgress = profile.profileData.goals?.map(goal => ({
-            goal: goal,
-            mentions: chats.reduce((count, chat) => {
-                return count + chat.messages.filter(msg => 
-                    msg.content.toLowerCase().includes(goal.toLowerCase())
-                ).length;
-            }, 0),
-            lastMentioned: null
-        })) || [];
+        // Generate recommendations
+        const recommendations = generateRecommendations(profile, conversationAnalysis);
 
         res.json({
             success: true,
             profile: profile,
-            analysis: {
-                conversation: conversationAnalysis,
-                memory: memoryInsights,
-                goals: goalProgress,
-                personality: {
-                    evolution: profile.personality?.evolutionHistory || [],
-                    currentTraits: profile.personality?.traits || []
-                }
-            },
-            recommendations: generateRecommendations(profile, conversationAnalysis)
+            analysis: conversationAnalysis,
+            recommendations: recommendations,
+            recentChats: chats.slice(0, 5)
         });
-
     } catch (error) {
         console.error('Get Profile Details Error:', error);
         res.status(500).json({ error: 'Fehler beim Laden der Profildetails' });
@@ -290,69 +238,42 @@ router.get('/:profileId/details', getUserFromToken, async (req, res) => {
 });
 
 // Create new profile
-router.post('/create', getUserFromToken, async (req, res) => {
+router.post('/', getUserFromToken, async (req, res) => {
     try {
-        const { conversationHistory } = req.body;
-        
-        if (!conversationHistory || !Array.isArray(conversationHistory)) {
-            return res.status(400).json({ error: 'Gesprächsverlauf ist erforderlich' });
+        const Profile = require('../models/Profile');
+        const { name, category, profileData, personality } = req.body;
+
+        if (!name || !category) {
+            return res.status(400).json({ 
+                error: 'Name und Kategorie sind erforderlich' 
+            });
         }
 
-        // Extract profile data using OpenAI
-        const openaiService = require('../services/openai');
-        let profileData;
-        
-        try {
-            profileData = await openaiService.extractProfileData(conversationHistory);
-        } catch (error) {
-            console.error('OpenAI extraction error:', error);
-            // Fallback profile data
-            profileData = {
-                name: "Neues Profil",
-                category: "general",
-                goals: ["Unterstützung erhalten"],
-                preferences: ["Personalisierte Hilfe"],
-                challenges: [],
-                frequency: "Regelmäßig",
-                experience: "Anfänger",
-                notes: "Automatisch erstellt"
-            };
-        }
-        
-        const Profile = require('../models/Profile');
         const newProfile = new Profile({
+            name,
+            category,
             userId: req.user._id,
-            name: profileData.name || 'Neues Profil',
-            category: profileData.category || 'general',
-            profileData: {
-                goals: profileData.goals || [],
-                preferences: profileData.preferences || [],
-                challenges: profileData.challenges || [],
-                experience: profileData.experience || 'Anfänger',
-                frequency: profileData.frequency || 'Regelmäßig',
-                notes: profileData.notes || ''
+            profileData: profileData || {},
+            personality: personality || {
+                traits: [],
+                preferences: {},
+                learningStyle: 'adaptive'
             },
             stats: {
                 totalConversations: 0,
-                totalMemories: 0,
-                avgSessionLength: 0,
-                lastUsed: new Date(),
-                userSatisfaction: 0.5,
-                personalityEvolutions: 0
-            }
+                lastUsed: new Date()
+            },
+            memories: []
         });
 
         const savedProfile = await newProfile.save();
-        
+
         res.status(201).json({
             success: true,
-            profile: {
-                id: savedProfile._id,
-                name: savedProfile.name,
-                category: savedProfile.category,
-                profileData: savedProfile.profileData
-            }
+            profile: savedProfile,
+            message: 'Profil erfolgreich erstellt'
         });
+
     } catch (error) {
         console.error('Create Profile Error:', error);
         res.status(500).json({ error: 'Fehler beim Erstellen des Profils' });
@@ -433,74 +354,14 @@ router.delete('/:profileId', getUserFromToken, async (req, res) => {
             success: true,
             message: 'Profil und alle zugehörigen Chats gelöscht'
         });
+
     } catch (error) {
         console.error('Delete Profile Error:', error);
         res.status(500).json({ error: 'Fehler beim Löschen des Profils' });
     }
 });
 
-// Bulk operations for profile management
-router.post('/bulk-action', getUserFromToken, async (req, res) => {
-    try {
-        const { action, profileIds, data } = req.body;
-        const Profile = require('../models/Profile');
-        const Chat = require('../models/Chat');
-
-        if (!action || !profileIds || !Array.isArray(profileIds)) {
-            return res.status(400).json({ error: 'Ungültige Bulk-Aktion' });
-        }
-
-        let result = { success: true, affected: 0, details: [] };
-
-        switch (action) {
-            case 'delete':
-                // Delete profiles and their chats
-                const deleteResult = await Profile.deleteMany({
-                    _id: { $in: profileIds },
-                    userId: req.user._id
-                });
-                
-                await Chat.deleteMany({
-                    profileId: { $in: profileIds },
-                    userId: req.user._id
-                });
-                
-                result.affected = deleteResult.deletedCount;
-                result.message = `${deleteResult.deletedCount} Profile gelöscht`;
-                break;
-
-            case 'archive':
-                const archiveResult = await Profile.updateMany(
-                    { _id: { $in: profileIds }, userId: req.user._id },
-                    { $set: { 'stats.archived': true, 'stats.archivedAt': new Date() } }
-                );
-                result.affected = archiveResult.modifiedCount;
-                result.message = `${archiveResult.modifiedCount} Profile archiviert`;
-                break;
-
-            case 'category-update':
-                if (!data || !data.category) {
-                    return res.status(400).json({ error: 'Kategorie ist erforderlich' });
-                }
-                const categoryResult = await Profile.updateMany(
-                    { _id: { $in: profileIds }, userId: req.user._id },
-                    { $set: { category: data.category } }
-                );
-                result.affected = categoryResult.modifiedCount;
-                result.message = `${categoryResult.modifiedCount} Profile Kategorie aktualisiert`;
-                break;
-
-            default:
-                return res.status(400).json({ error: 'Unbekannte Aktion' });
-        }
-
-        res.json(result);
-
-    } catch (error) {
-        console.error('Bulk Action Error:', error);
-        res.status(500).json({ error: 'Fehler bei Bulk-Aktion' });
-    }
-});
+// CHAT ROUTES FOR PROFILES
 
 // Get all chats for a profile
 router.get('/:profileId/chats', getUserFromToken, async (req, res) => {
@@ -662,7 +523,8 @@ router.post('/:profileId/chats/:chatId/message', getUserFromToken, async (req, r
         await chat.save();
 
         // Update profile stats
-        profile.stats.totalConversations += 1;
+        profile.stats = profile.stats || {};
+        profile.stats.totalConversations = (profile.stats.totalConversations || 0) + 1;
         profile.stats.lastUsed = new Date();
         await profile.save();
 
@@ -747,46 +609,31 @@ function generateRecommendations(profile, analysis) {
             priority: 'high',
             title: 'Mehr Interaktion',
             description: 'Führen Sie mehr Gespräche, um personalisierte Empfehlungen zu erhalten.',
-            action: 'start_chat'
+            action: 'Starten Sie einen neuen Chat'
         });
     }
 
-    if (profile.profileData.goals?.length === 0) {
-        recommendations.push({
-            type: 'setup',
-            priority: 'medium',
-            title: 'Ziele definieren',
-            description: 'Definieren Sie klare Ziele für bessere Unterstützung.',
-            action: 'edit_goals'
-        });
-    }
-
-    if (analysis.engagementScore < 0.3) {
+    if (analysis.recentActivity === 0) {
         recommendations.push({
             type: 'activity',
+            priority: 'medium',
+            title: 'Profil wieder aktivieren',
+            description: 'Dieses Profil war längere Zeit inaktiv.',
+            action: 'Neues Gespräch beginnen'
+        });
+    }
+
+    if (recommendations.length === 0) {
+        recommendations.push({
+            type: 'general',
             priority: 'low',
-            title: 'Regelmäßigkeit erhöhen',
-            description: 'Nutzen Sie das Profil regelmäßiger für bessere Ergebnisse.',
-            action: 'schedule_reminder'
+            title: 'Profil läuft gut',
+            description: 'Ihr Profil wird aktiv genutzt und entwickelt sich weiter.',
+            action: 'Weiter so!'
         });
     }
 
     return recommendations;
 }
-
-// Helper function to extract topics from text
-function extractTopics(text) {
-    const commonTopics = [
-        'arbeit', 'gesundheit', 'lernen', 'sport', 'kochen', 'reisen', 
-        'technologie', 'beziehungen', 'finanzen', 'kreativität'
-    ];
-    
-    const lowerText = text.toLowerCase();
-    return commonTopics.filter(topic => 
-        lowerText.includes(topic) || lowerText.includes(topic.slice(0, -1))
-    );
-}
-
-console.log('✅ Profile routes: All routes and functions defined');
 
 module.exports = router;

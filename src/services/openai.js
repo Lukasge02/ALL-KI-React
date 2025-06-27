@@ -15,6 +15,7 @@ class OpenAIService {
         console.log('✅ OpenAI Service initialisiert');
     }
 
+    // Quick chat for general questions
     async quickChat(message, userContext = {}) {
         if (!this.client) {
             throw new Error('OpenAI API nicht konfiguriert');
@@ -49,13 +50,13 @@ ${userContext.name ? `Der Benutzer heißt ${userContext.name}.` : ''}`;
         }
     }
 
+    // Profile interview assistant
     async profileInterview(message, conversationHistory = [], profileData = {}) {
         if (!this.client) {
             throw new Error('OpenAI API nicht konfiguriert');
         }
 
         try {
-            // ✅ DYNAMISCHES INTERVIEW basierend auf User-Input
             const systemPrompt = `Du bist ein intelligenter Profil-Interview-Assistent von ALL-KI.
 
 ZIEL: Sammle Informationen für ein personalisiertes KI-Profil basierend auf dem User-Input.
@@ -78,14 +79,14 @@ User: "Arbeit projekte"
 
 WICHTIG:
 - Halte Fragen kurz, spezifisch und motivierend
-- Nach 4-5 relevanten Fragen sage: "Vielen Dank! Ich habe genug Informationen für dein personalisiertes '${this.getProfileNameFromHistory(conversationHistory)}' Profil gesammelt."
-- Stelle nur EINE Frage pro Antwort
+- Nach 4-5 relevanten Fragen sage: "Vielen Dank! Ich habe genug Informationen für dein personalisiertes Profil."
+- Erkenne automatisch, wenn User fertig ist oder abbrechen will
 - Sei enthusiastisch und unterstützend
 
-Bisherige Gespräch: ${conversationHistory.length > 0 ? 'Hat bereits begonnen' : 'Erstes Interview'}
-Profil-Context: ${Object.keys(profileData).length > 0 ? JSON.stringify(profileData) : 'Neues Profil wird erstellt'}`;
+AKTUELLE INFORMATIONEN:
+${Object.keys(profileData).length > 0 ? `Bereits gesammelt: ${JSON.stringify(profileData)}` : 'Noch keine Daten gesammelt'}`;
 
-            // Build conversation history
+            // Build messages array with conversation history
             const messages = [
                 {
                     role: "system",
@@ -110,7 +111,7 @@ Profil-Context: ${Object.keys(profileData).length > 0 ? JSON.stringify(profileDa
             const completion = await this.client.chat.completions.create({
                 model: "gpt-3.5-turbo",
                 messages: messages,
-                max_tokens: 300,
+                max_tokens: 400,
                 temperature: 0.8,
             });
 
@@ -121,58 +122,42 @@ Profil-Context: ${Object.keys(profileData).length > 0 ? JSON.stringify(profileDa
         }
     }
 
-    // ✅ Helper function to extract profile name from first user message
-    getProfileNameFromHistory(conversationHistory) {
-        if (conversationHistory.length > 0) {
-            const firstUserMessage = conversationHistory.find(msg => msg.role === 'user');
-            return firstUserMessage ? firstUserMessage.content : 'Profil';
-        }
-        return 'Profil';
-    }
-
+    // Extract profile data from conversation history
     async extractProfileData(conversationHistory) {
         if (!this.client) {
             throw new Error('OpenAI API nicht konfiguriert');
         }
 
         try {
-            // ✅ VERBESSERTER PROMPT für freie Kategorien
-            const systemPrompt = `Analysiere das folgende Interview und extrahiere strukturierte Profildaten.
-
-WICHTIG für "name" und "category":
-- Der "name" soll dem ursprünglichen User-Input sehr ähnlich sein (nur Rechtschreibung/Großschreibung korrigieren)
-- Die "category" soll eine bereinigte, kurze Version des Namens sein
-- Beispiele:
-  - User sagt "sport" → name: "Sport", category: "Sport" 
-  - User sagt "kochen lernen" → name: "Kochen Lernen", category: "Kochen"
-  - User sagt "arbeit projekkte" → name: "Arbeit Projekte", category: "Arbeit"
-  - User sagt "fitness training" → name: "Fitness Training", category: "Fitness"
-
-EXTRAHIERE aus dem Gespräch:
-- goals: Konkrete Ziele die erwähnt wurden
-- preferences: Was der User mag, bevorzugt oder gerne macht
-- challenges: Schwierigkeiten oder Herausforderungen
-- frequency: Wie oft sich der User damit beschäftigt
-- experience: Erfahrungslevel (Anfänger/Fortgeschritten/Experte)
-- notes: Wichtige Zusatzinfos oder Kontext
-
-FORMAT (EXAKT so ausgeben):
-{
-  "name": "Exakt wie User wollte (nur saubere Rechtschreibung)",
-  "category": "Kurze bereinigte Kategorie", 
-  "goals": ["Konkrete Ziele aus dem Gespräch"],
-  "preferences": ["Was der User mag/bevorzugt"],
-  "challenges": ["Herausforderungen die erwähnt wurden"],
-  "frequency": "Wie oft beschäftigt sich der User damit",
-  "experience": "Anfänger/Fortgeschritten/Experte",
-  "notes": "Wichtige Zusatzinfos aus dem Gespräch"
-}
-
-Antworte NUR mit dem JSON-Objekt, keine zusätzlichen Erklärungen oder Markdown.`;
-
+            // Prepare conversation text
             const conversationText = conversationHistory
                 .map(msg => `${msg.role}: ${msg.content}`)
                 .join('\n');
+
+            const systemPrompt = `Du bist ein Profil-Analyse-Experte. Analysiere die folgende Unterhaltung und extrahiere strukturierte Profildaten.
+
+AUFGABE: Analysiere die Unterhaltung und erstelle ein JSON-Objekt mit folgender Struktur:
+
+{
+    "name": "Profilname (aus erstem User-Input, korrigiere nur Rechtschreibung)",
+    "category": "passende Kategorie aus: sport, kochen, arbeit, lernen, gesundheit, hobby, familie, finanzen, technologie, kreativ, reisen, general",
+    "goals": ["Ziel 1", "Ziel 2", ...],
+    "preferences": ["Vorliebe 1", "Vorliebe 2", ...],
+    "challenges": ["Herausforderung 1", "Herausforderung 2", ...],
+    "experience": "anfaenger|fortgeschritten|experte",
+    "frequency": "taeglich|woechentlich|monatlich|selten",
+    "notes": "Zusätzliche wichtige Informationen als Fließtext"
+}
+
+REGELN:
+- Wenn Informationen fehlen, verwende sinnvolle Standard-Werte
+- Der "name" sollte EXAKT dem ersten User-Input entsprechen (nur Rechtschreibung korrigieren)
+- Alle Arrays sollten mindestens ein Element haben
+- "notes" sollte eine prägnante Zusammenfassung sein
+- Antworte NUR mit dem JSON-Objekt, kein anderer Text
+
+UNTERHALTUNG:
+${conversationText}`;
 
             const completion = await this.client.chat.completions.create({
                 model: "gpt-3.5-turbo",
@@ -180,138 +165,93 @@ Antworte NUR mit dem JSON-Objekt, keine zusätzlichen Erklärungen oder Markdown
                     {
                         role: "system",
                         content: systemPrompt
-                    },
-                    {
-                        role: "user",
-                        content: conversationText
                     }
                 ],
-                max_tokens: 400,
-                temperature: 0.3,
+                max_tokens: 600,
+                temperature: 0.3, // Lower temperature for more consistent JSON output
             });
 
             const response = completion.choices[0].message.content.trim();
-            console.log('🔹 Raw OpenAI response:', response);
             
-            // ✅ ROBUSTES JSON PARSING
-            let parsedData;
+            // Try to parse the JSON response
             try {
-                // Remove potential markdown formatting
-                const cleanResponse = response.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-                parsedData = JSON.parse(cleanResponse);
-            } catch (parseError) {
-                console.error('🔹 JSON parse error:', parseError);
-                console.error('🔹 Response was:', response);
+                const profileData = JSON.parse(response);
                 
-                // ✅ INTELLIGENTER FALLBACK basierend auf ersten User-Input
-                const firstUserMessage = conversationHistory.find(msg => msg.role === 'user');
-                const userInput = firstUserMessage ? firstUserMessage.content : 'Profil';
+                // Validate and sanitize the data
+                return this.validateProfileData(profileData);
+            } catch (jsonError) {
+                console.error('JSON Parse Error:', jsonError);
+                console.log('Raw response:', response);
                 
-                parsedData = {
-                    name: this.cleanProfileName(userInput),
-                    category: this.extractCategory(userInput),
-                    goals: this.extractGoalsFromConversation(conversationHistory),
-                    preferences: this.extractPreferencesFromConversation(conversationHistory),
-                    challenges: this.extractChallengesFromConversation(conversationHistory),
-                    frequency: "Regelmäßig",
-                    experience: "Anfänger",
-                    notes: "Profil basierend auf Gesprächsanalyse erstellt"
-                };
+                // Return fallback data if JSON parsing fails
+                return this.createFallbackProfileData(conversationHistory);
             }
-            
-            // ✅ VALIDIERUNG und BEREINIGUNG
-            parsedData.name = parsedData.name || 'Neues Profil';
-            parsedData.category = parsedData.category || parsedData.name;
-            parsedData.goals = Array.isArray(parsedData.goals) ? parsedData.goals : [];
-            parsedData.preferences = Array.isArray(parsedData.preferences) ? parsedData.preferences : [];
-            parsedData.challenges = Array.isArray(parsedData.challenges) ? parsedData.challenges : [];
-            
-            console.log('🔹 Final extracted profile data:', parsedData);
-            return parsedData;
-            
+
         } catch (error) {
             console.error('OpenAI Extract Profile Data Error:', error);
-            throw new Error('Profildaten konnten nicht extrahiert werden');
+            // Return fallback data on any error
+            return this.createFallbackProfileData(conversationHistory);
         }
     }
 
-    // ✅ HELPER METHODS für intelligente Extraktion
-    cleanProfileName(input) {
-        // Erste Buchstaben groß, Rest klein, Rechtschreibung bereinigen
-        return input.trim()
-            .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-            .join(' ');
+    // Validate and sanitize extracted profile data
+    validateProfileData(data) {
+        const validCategories = [
+            'sport', 'kochen', 'arbeit', 'lernen', 'gesundheit', 'hobby', 
+            'familie', 'finanzen', 'technologie', 'kreativ', 'reisen', 'general'
+        ];
+        
+        const validExperience = ['anfaenger', 'fortgeschritten', 'experte'];
+        const validFrequency = ['taeglich', 'woechentlich', 'monatlich', 'selten'];
+
+        return {
+            name: (data.name || 'Neues Profil').substring(0, 100),
+            category: validCategories.includes(data.category) ? data.category : 'general',
+            goals: Array.isArray(data.goals) && data.goals.length > 0 ? data.goals.slice(0, 5) : ['Unterstützung erhalten'],
+            preferences: Array.isArray(data.preferences) && data.preferences.length > 0 ? data.preferences.slice(0, 5) : ['Personalisierte Hilfe'],
+            challenges: Array.isArray(data.challenges) ? data.challenges.slice(0, 5) : [],
+            experience: validExperience.includes(data.experience) ? data.experience : 'anfaenger',
+            frequency: validFrequency.includes(data.frequency) ? data.frequency : 'woechentlich',
+            notes: (data.notes || '').substring(0, 1000)
+        };
     }
 
-    extractCategory(input) {
-        const cleaned = this.cleanProfileName(input);
-        // Nehme erstes Wort oder max 20 Zeichen
-        return cleaned.split(' ')[0].substring(0, 20);
+    // Create fallback profile data when extraction fails
+    createFallbackProfileData(conversationHistory) {
+        // Try to extract at least the profile name from the first user message
+        const firstUserMessage = conversationHistory.find(msg => msg.role === 'user');
+        const profileName = firstUserMessage ? firstUserMessage.content.substring(0, 50) : 'Neues Profil';
+
+        return {
+            name: profileName,
+            category: 'general',
+            goals: ['Unterstützung erhalten'],
+            preferences: ['Personalisierte Hilfe'],
+            challenges: [],
+            experience: 'anfaenger',
+            frequency: 'woechentlich',
+            notes: 'Automatisch erstelltes Profil'
+        };
     }
 
-    extractGoalsFromConversation(history) {
-        const goals = [];
-        const goalKeywords = ['ziel', 'erreichen', 'schaffen', 'möchte', 'will', 'goal'];
-        
-        history.forEach(msg => {
-            if (msg.role === 'user') {
-                const lower = msg.content.toLowerCase();
-                if (goalKeywords.some(keyword => lower.includes(keyword))) {
-                    goals.push(msg.content.substring(0, 100));
-                }
-            }
-        });
-        
-        return goals.slice(0, 3); // Max 3 goals
-    }
-
-    extractPreferencesFromConversation(history) {
-        const preferences = [];
-        const prefKeywords = ['mag', 'liebe', 'bevorzuge', 'gerne', 'am liebsten'];
-        
-        history.forEach(msg => {
-            if (msg.role === 'user') {
-                const lower = msg.content.toLowerCase();
-                if (prefKeywords.some(keyword => lower.includes(keyword))) {
-                    preferences.push(msg.content.substring(0, 100));
-                }
-            }
-        });
-        
-        return preferences.slice(0, 3);
-    }
-
-    extractChallengesFromConversation(history) {
-        const challenges = [];
-        const challengeKeywords = ['schwierig', 'problem', 'herausforderung', 'schwer', 'struggle'];
-        
-        history.forEach(msg => {
-            if (msg.role === 'user') {
-                const lower = msg.content.toLowerCase();
-                if (challengeKeywords.some(keyword => lower.includes(keyword))) {
-                    challenges.push(msg.content.substring(0, 100));
-                }
-            }
-        });
-        
-        return challenges.slice(0, 3);
-    }
-
-    async contextualChat(message, profileData = {}, conversationHistory = []) {
+    // Contextual chat using profile data
+    async contextualChat(message, profileData, conversationHistory = []) {
         if (!this.client) {
             throw new Error('OpenAI API nicht konfiguriert');
         }
 
         try {
-            // ✅ VERBESSERTER KONTEXT basierend auf dynamischen Profilen
-            let systemPrompt = `Du bist ALL-KI, ein personalisierter Assistent für den Nutzer.`;
-            
-            if (Object.keys(profileData).length > 0) {
-                systemPrompt += `\n\nKontext über den Nutzer:
-Profil: ${profileData.name || 'Unbekannt'} (Kategorie: ${profileData.category || 'Allgemein'})
-Ziele: ${profileData.goals && profileData.goals.length > 0 ? profileData.goals.join(', ') : 'Keine spezifischen Ziele erwähnt'}
-Vorlieben: ${profileData.preferences && profileData.preferences.length > 0 ? profileData.preferences.join(', ') : 'Keine spezifischen Vorlieben erwähnt'}
+            // Build system prompt with profile context
+            let systemPrompt = `Du bist ein spezialisierter KI-Assistent für das Profil "${profileData.name || 'Unbekannt'}".
+
+PROFIL-KONTEXT:
+Kategorie: ${profileData.category || 'Allgemein'}`;
+
+            // Add detailed profile information if available
+            if (profileData.goals && profileData.goals.length > 0) {
+                systemPrompt += `
+Ziele: ${profileData.goals.join(', ')}
+Vorlieben: ${profileData.preferences ? profileData.preferences.join(', ') : 'Keine spezifischen Vorlieben erwähnt'}
 Herausforderungen: ${profileData.challenges && profileData.challenges.length > 0 ? profileData.challenges.join(', ') : 'Keine spezifischen Herausforderungen erwähnt'}
 Erfahrung: ${profileData.experience || 'Unbekannt'}
 Häufigkeit: ${profileData.frequency || 'Unbekannt'}
@@ -362,6 +302,103 @@ Stelle gelegentlich Rückfragen um das Profil noch besser zu verstehen.`;
         }
     }
 
+    // Generate smart suggestions based on profile
+    async generateSuggestions(profileData, context = 'general') {
+        if (!this.client) {
+            throw new Error('OpenAI API nicht konfiguriert');
+        }
+
+        try {
+            const systemPrompt = `Du bist ein intelligenter Vorschlag-Generator für das ALL-KI System.
+
+AUFGABE: Generiere 3-5 personalisierte, actionable Vorschläge für den User basierend auf seinem Profil.
+
+PROFIL:
+- Name: ${profileData.name}
+- Kategorie: ${profileData.category}
+- Ziele: ${profileData.goals?.join(', ') || 'Keine'}
+- Erfahrung: ${profileData.experience || 'Unbekannt'}
+- Häufigkeit: ${profileData.frequency || 'Unbekannt'}
+
+KONTEXT: ${context}
+
+FORMAT: Antworte mit einem JSON Array von Objekten:
+[
+    {
+        "title": "Kurzer Titel",
+        "description": "Detaillierte Beschreibung",
+        "action": "Konkrete Handlungsaufforderung",
+        "priority": "high|medium|low"
+    }
+]
+
+Die Vorschläge sollen:
+- Spezifisch für die Kategorie sein
+- Auf die Ziele eingehen
+- Dem Erfahrungslevel entsprechen
+- Praktisch umsetzbar sein`;
+
+            const completion = await this.client.chat.completions.create({
+                model: "gpt-3.5-turbo",
+                messages: [
+                    {
+                        role: "system",
+                        content: systemPrompt
+                    }
+                ],
+                max_tokens: 800,
+                temperature: 0.8,
+            });
+
+            const response = completion.choices[0].message.content.trim();
+            
+            try {
+                return JSON.parse(response);
+            } catch (jsonError) {
+                console.error('Suggestions JSON Parse Error:', jsonError);
+                return this.getFallbackSuggestions(profileData);
+            }
+
+        } catch (error) {
+            console.error('OpenAI Generate Suggestions Error:', error);
+            return this.getFallbackSuggestions(profileData);
+        }
+    }
+
+    // Fallback suggestions when AI generation fails
+    getFallbackSuggestions(profileData) {
+        const category = profileData.category || 'general';
+        
+        const fallbackSuggestions = {
+            sport: [
+                {
+                    title: "Trainingsplan erstellen",
+                    description: "Erstelle einen personalisierten Trainingsplan basierend auf deinen Zielen",
+                    action: "Erzähle mir von deinen Fitnesszielen",
+                    priority: "high"
+                }
+            ],
+            kochen: [
+                {
+                    title: "Neues Rezept ausprobieren",
+                    description: "Entdecke ein Rezept, das zu deinen Vorlieben passt",
+                    action: "Sage mir, was du gerne isst",
+                    priority: "medium"
+                }
+            ],
+            general: [
+                {
+                    title: "Profil vervollständigen",
+                    description: "Teile mehr Informationen, um bessere Empfehlungen zu erhalten",
+                    action: "Erzähle mir mehr über deine Ziele",
+                    priority: "medium"
+                }
+            ]
+        };
+
+        return fallbackSuggestions[category] || fallbackSuggestions.general;
+    }
+
     // Health check method
     async testConnection() {
         if (!this.client) {
@@ -392,6 +429,15 @@ Stelle gelegentlich Rückfragen um das Profil noch besser zu verstehen.`;
                 error: error.message 
             };
         }
+    }
+
+    // Get AI service status
+    getStatus() {
+        return {
+            configured: !!this.client,
+            apiKeyPresent: !!process.env.OPENAI_API_KEY,
+            timestamp: new Date().toISOString()
+        };
     }
 }
 
