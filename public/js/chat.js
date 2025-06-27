@@ -1,435 +1,361 @@
-// chat.js - Profile Chat Page Functionality
-
-class ProfileChatManager {
+/**
+ * 💬 CHAT SYSTEM - Hauptklasse für Chat-Funktionalität
+ * Separation of Concerns: Chat-Logic getrennt von UI-Management
+ */
+class ChatManager {
     constructor() {
-        this.profileId = null;
-        this.currentChatId = null;
-        this.profile = null;
-        this.chats = [];
+        this.currentProfile = null;
         this.currentMessages = [];
         this.isTyping = false;
+        this.chatHistory = new Map(); // Profile ID -> Messages
+        this.maxRetries = 3;
+        this.retryDelay = 1000;
+        
+        console.log('💬 ChatManager initializing...');
         this.init();
     }
 
+    // ========================================
+    // INITIALISIERUNG
+    // ========================================
+
     init() {
-        this.checkAuth();
-        this.extractProfileId();
-        this.bindEvents();
-        this.loadProfile();
-        this.loadChats();
-    }
-
-    checkAuth() {
-        const isLoggedIn = localStorage.getItem('allKiLoggedIn');
-        if (isLoggedIn !== 'true') {
-            window.location.href = '/login.html';
-            return;
-        }
-    }
-
-    extractProfileId() {
-        // Extract profile ID from URL: /chat.html?profile=ID
-        const urlParams = new URLSearchParams(window.location.search);
-        this.profileId = urlParams.get('profile');
-        
-        if (!this.profileId) {
-            this.showToast('Profil-ID nicht gefunden', 'error');
-            setTimeout(() => {
-                window.location.href = '/dashboard.html';
-            }, 2000);
-            return;
-        }
-    }
-
-    getAuthHeaders() {
-        return {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('allKiAuthToken')}`,
-            'X-User-Email': localStorage.getItem('allKiUserEmail')
-        };
-    }
-
-    bindEvents() {
-        // Back to dashboard
-        document.getElementById('backToDashboard').addEventListener('click', () => {
-            window.location.href = '/dashboard.html';
-        });
-
-        // New chat
-        document.getElementById('newChatBtn').addEventListener('click', () => {
-            this.createNewChat();
-        });
-
-        // Message input
-        const messageInput = document.getElementById('messageInput');
-        messageInput.addEventListener('input', () => {
-            this.handleInputChange();
-        });
-
-        messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                this.sendMessage();
-            }
-        });
-
-        // Send button
-        document.getElementById('sendBtn').addEventListener('click', () => {
-            this.sendMessage();
-        });
-
-        // Chat actions
-        document.getElementById('clearChatBtn').addEventListener('click', () => {
-            this.clearCurrentChat();
-        });
-
-        document.getElementById('exportChatBtn').addEventListener('click', () => {
-            this.exportCurrentChat();
-        });
-
-        // Suggestion chips
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('suggestion-chip')) {
-                this.sendSuggestion(e.target.textContent);
-            }
-        });
-    }
-
-    async loadProfile() {
         try {
-            const response = await fetch(`/api/profiles/${this.profileId}`, {
-                method: 'GET',
-                headers: this.getAuthHeaders()
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.profile = data.profile;
-                this.updateProfileInfo();
-            } else {
-                this.showToast('Profil konnte nicht geladen werden', 'error');
-                setTimeout(() => {
-                    window.location.href = '/dashboard.html';
-                }, 2000);
-            }
-        } catch (error) {
-            console.error('Error loading profile:', error);
-            this.showToast('Verbindungsfehler beim Laden des Profils', 'error');
-        }
-    }
-
-    updateProfileInfo() {
-        if (!this.profile) return;
-
-        const categoryIcons = {
-            'work': '💼',
-            'health': '🏥',
-            'learning': '📚',
-            'creativity': '🎨',
-            'relationships': '👥',
-            'finance': '💰',
-            'general': '🎯'
-        };
-
-        const categoryNames = {
-            'work': 'Arbeit',
-            'health': 'Gesundheit',
-            'learning': 'Lernen',
-            'creativity': 'Kreativität',
-            'relationships': 'Beziehungen',
-            'finance': 'Finanzen',
-            'general': 'Allgemein'
-        };
-
-        const icon = categoryIcons[this.profile.category] || '🎯';
-        const categoryName = categoryNames[this.profile.category] || 'Allgemein';
-
-        document.querySelector('.profile-avatar').textContent = icon;
-        document.getElementById('profileName').textContent = this.profile.name;
-        document.getElementById('profileCategory').textContent = categoryName;
-
-        // Update welcome message
-        const welcomeContent = document.querySelector('.welcome-content');
-        if (welcomeContent) {
-            welcomeContent.querySelector('h3').textContent = `Willkommen zu ${this.profile.name}!`;
-            welcomeContent.querySelector('p').textContent = `Ich bin Ihr persönlicher KI-Assistent für ${this.profile.name}. Ich kenne Ihre Ziele und Präferenzen und kann Ihnen gezielt helfen.`;
-        }
-    }
-
-    async loadChats() {
-        try {
-            const response = await fetch(`/api/profiles/${this.profileId}/chats`, {
-                method: 'GET',
-                headers: this.getAuthHeaders()
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.chats = data.chats || [];
-                this.updateChatHistory();
-                
-                // Load most recent chat if available
-                if (this.chats.length > 0) {
-                    this.loadChat(this.chats[0]._id);
-                }
-            }
-        } catch (error) {
-            console.error('Error loading chats:', error);
-        }
-    }
-
-    updateChatHistory() {
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-        const todayChats = [];
-        const yesterdayChats = [];
-        const weekChats = [];
-        const olderChats = [];
-
-        this.chats.forEach(chat => {
-            const chatDate = new Date(chat.updatedAt);
-            const chatDay = new Date(chatDate.getFullYear(), chatDate.getMonth(), chatDate.getDate());
-
-            if (chatDay.getTime() === today.getTime()) {
-                todayChats.push(chat);
-            } else if (chatDay.getTime() === yesterday.getTime()) {
-                yesterdayChats.push(chat);
-            } else if (chatDate >= weekAgo) {
-                weekChats.push(chat);
-            } else {
-                olderChats.push(chat);
-            }
-        });
-
-        this.renderChatSection('todayChats', todayChats);
-        this.renderChatSection('yesterdayChats', yesterdayChats);
-        this.renderChatSection('weekChats', weekChats);
-        this.renderChatSection('olderChats', olderChats);
-    }
-
-    renderChatSection(containerId, chats) {
-        const container = document.getElementById(containerId);
-        container.innerHTML = '';
-
-        chats.forEach(chat => {
-            const chatItem = document.createElement('div');
-            chatItem.className = `chat-item ${chat._id === this.currentChatId ? 'active' : ''}`;
+            console.log('🔧 Setting up chat event listeners...');
+            this.setupEventListeners();
             
-            const title = chat.title || 'Neuer Chat';
-            const time = new Date(chat.updatedAt).toLocaleTimeString('de-DE', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            console.log('📱 Checking chat interface...');
+            this.initializeChatInterface();
+            
+            console.log('✅ ChatManager ready!');
+        } catch (error) {
+            console.error('❌ ChatManager initialization failed:', error);
+            this.showError('Chat-System konnte nicht initialisiert werden');
+        }
+    }
 
-            chatItem.innerHTML = `
-                <div class="chat-item-icon">💬</div>
-                <div class="chat-item-content">
-                    <div class="chat-item-title">${title}</div>
-                    <div class="chat-item-time">${time}</div>
-                </div>
-                <div class="chat-item-actions">
-                    <button class="chat-action-btn" onclick="profileChatManager.deleteChat('${chat._id}')" title="Chat löschen">
-                        🗑️
-                    </button>
-                </div>
-            `;
-
-            chatItem.addEventListener('click', (e) => {
-                if (!e.target.closest('.chat-action-btn')) {
-                    this.loadChat(chat._id);
+    setupEventListeners() {
+        // Chat Input Handling
+        const chatInput = document.getElementById('chatInput');
+        if (chatInput) {
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendMessage();
                 }
             });
 
-            container.appendChild(chatItem);
-        });
-    }
-
-    async createNewChat() {
-        try {
-            const response = await fetch(`/api/profiles/${this.profileId}/chats`, {
-                method: 'POST',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify({
-                    title: 'Neuer Chat'
-                })
+            chatInput.addEventListener('input', () => {
+                this.handleTyping();
             });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.currentChatId = data.chat._id;
-                this.currentMessages = [];
-                
-                // Reload chats and update UI
-                await this.loadChats();
-                this.clearChatMessages();
-                this.updateChatTitle('Neuer Chat');
-                
-                this.showToast('Neuer Chat erstellt', 'success');
-            } else {
-                this.showToast('Fehler beim Erstellen des Chats', 'error');
-            }
-        } catch (error) {
-            console.error('Error creating new chat:', error);
-            this.showToast('Verbindungsfehler', 'error');
         }
-    }
 
-    async loadChat(chatId) {
-        try {
-            const response = await fetch(`/api/profiles/${this.profileId}/chats/${chatId}`, {
-                method: 'GET',
-                headers: this.getAuthHeaders()
+        // Send Button
+        const sendBtn = document.getElementById('sendMessageBtn');
+        if (sendBtn) {
+            sendBtn.addEventListener('click', () => {
+                this.sendMessage();
             });
+        }
 
-            if (response.ok) {
-                const data = await response.json();
-                this.currentChatId = chatId;
-                this.currentMessages = data.messages || [];
-                
-                this.updateChatHistory(); // Update active state
-                this.renderMessages();
-                this.updateChatTitle(data.chat.title || 'Chat');
-            }
-        } catch (error) {
-            console.error('Error loading chat:', error);
-            this.showToast('Fehler beim Laden des Chats', 'error');
+        // Quick Chat (falls vorhanden)
+        const quickChatInput = document.getElementById('quickChatInput');
+        if (quickChatInput) {
+            quickChatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendQuickChat();
+                }
+            });
+        }
+
+        const quickChatBtn = document.getElementById('quickChatBtn');
+        if (quickChatBtn) {
+            quickChatBtn.addEventListener('click', () => {
+                this.sendQuickChat();
+            });
+        }
+
+        // Chat Controls
+        const clearChatBtn = document.getElementById('clearChatBtn');
+        if (clearChatBtn) {
+            clearChatBtn.addEventListener('click', () => {
+                this.clearCurrentChat();
+            });
+        }
+
+        const exportChatBtn = document.getElementById('exportChatBtn');
+        if (exportChatBtn) {
+            exportChatBtn.addEventListener('click', () => {
+                this.exportCurrentChat();
+            });
         }
     }
 
-    renderMessages() {
-        const container = document.getElementById('chatMessages');
-        container.innerHTML = '';
-
-        // Add welcome message if no messages
-        if (this.currentMessages.length === 0) {
-            this.addWelcomeMessage(container);
-            return;
+    initializeChatInterface() {
+        // Initialize chat messages container
+        const messagesContainer = document.getElementById('chatMessages');
+        if (messagesContainer) {
+            messagesContainer.innerHTML = '';
+            this.showWelcomeMessage();
         }
 
-        this.currentMessages.forEach(message => {
-            this.addMessageToDOM(message.content, message.role, message.timestamp);
-        });
-
-        this.scrollToBottom();
+        // Reset input
+        const chatInput = document.getElementById('chatInput');
+        if (chatInput) {
+            chatInput.value = '';
+            chatInput.placeholder = 'Schreiben Sie Ihre Nachricht...';
+        }
     }
 
-    addWelcomeMessage(container) {
-        const welcomeMessage = document.createElement('div');
-        welcomeMessage.className = 'welcome-message';
-        
-        const profileName = this.profile?.name || 'Ihr Profil';
-        
-        welcomeMessage.innerHTML = `
-            <div class="welcome-avatar">🤖</div>
-            <div class="welcome-content">
-                <h3>Willkommen zu ${profileName}!</h3>
-                <p>Ich bin Ihr persönlicher KI-Assistent für ${profileName}. Ich kenne Ihre Ziele und Präferenzen und kann Ihnen gezielt helfen.</p>
-                <div class="suggestion-chips">
-                    <button class="suggestion-chip">Wie kann ich meine Ziele erreichen?</button>
-                    <button class="suggestion-chip">Gib mir einen Tipp für heute</button>
-                    <button class="suggestion-chip">Was weißt du über mich?</button>
-                    <button class="suggestion-chip">Hilf mir bei meinen Herausforderungen</button>
-                </div>
-            </div>
-        `;
-        
-        container.appendChild(welcomeMessage);
-    }
-
-    handleInputChange() {
-        const input = document.getElementById('messageInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const charCount = document.getElementById('charCount');
-        
-        const text = input.value.trim();
-        const length = input.value.length;
-        
-        sendBtn.disabled = text.length === 0;
-        charCount.textContent = `${length}/2000`;
-        
-        // Auto-resize textarea
-        input.style.height = 'auto';
-        input.style.height = Math.min(input.scrollHeight, 200) + 'px';
-    }
+    // ========================================
+    // CHAT-FUNKTIONALITÄT
+    // ========================================
 
     async sendMessage() {
-        const input = document.getElementById('messageInput');
+        const input = document.getElementById('chatInput');
+        if (!input || this.isTyping) return;
+
         const message = input.value.trim();
-        
-        if (!message || this.isTyping) return;
-        
-        // Clear input
-        input.value = '';
-        this.handleInputChange();
-        
-        // Send message
-        await this.sendChatMessage(message);
-    }
+        if (!message) return;
 
-    async sendSuggestion(text) {
-        await this.sendChatMessage(text);
-    }
-
-    async sendChatMessage(message) {
-        if (!this.currentChatId) {
-            await this.createNewChat();
-        }
-        
-        this.isTyping = true;
-        
-        // Add user message to UI
-        this.addMessageToDOM(message, 'user');
-        this.hideWelcomeMessage();
-        
-        // Show typing indicator
-        this.showTypingIndicator();
-        
         try {
-            const response = await fetch(`/api/profiles/${this.profileId}/chats/${this.currentChatId}/message`, {
-                method: 'POST',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify({ message })
-            });
+            // Add user message to chat
+            this.addMessageToDOM(message, 'user');
+            input.value = '';
+            this.hideWelcomeMessage();
 
-            const data = await response.json();
-            
-            // Hide typing indicator
-            this.hideTypingIndicator();
-            
-            if (data.success && data.response) {
-                // Add AI response to UI
-                this.addMessageToDOM(data.response, 'assistant');
-                
-                // Update chat title if this is the first message
-                if (this.currentMessages.length <= 2) {
-                    const title = this.generateChatTitle(message);
-                    this.updateChatTitle(title);
-                    await this.updateChatTitleOnServer(title);
-                }
-                
-                // Reload chats to update timestamps
-                await this.loadChats();
+            // Show typing indicator
+            this.showTypingIndicator();
+            this.isTyping = true;
+
+            let response;
+            if (this.currentProfile) {
+                // Profile-specific chat
+                response = await this.sendProfileMessage(message);
             } else {
-                this.addMessageToDOM('Entschuldigung, ich konnte nicht antworten. Bitte versuchen Sie es erneut.', 'assistant');
+                // Quick chat
+                response = await this.sendQuickMessage(message);
             }
+
+            // Hide typing indicator and show response
+            this.hideTypingIndicator();
+            this.addMessageToDOM(response, 'assistant');
+
         } catch (error) {
             console.error('Send message error:', error);
             this.hideTypingIndicator();
-            this.addMessageToDOM('Verbindungsfehler. Bitte versuchen Sie es erneut.', 'assistant');
+            this.addMessageToDOM(
+                'Entschuldigung, es gab einen Fehler. Bitte versuchen Sie es erneut.', 
+                'assistant'
+            );
         } finally {
             this.isTyping = false;
         }
     }
 
+    async sendQuickChat() {
+        const input = document.getElementById('quickChatInput');
+        if (!input || this.isTyping) return;
+
+        const message = input.value.trim();
+        if (!message) return;
+
+        try {
+            // Show loading state
+            this.setQuickChatLoading(true);
+            this.isTyping = true;
+
+            const response = await this.sendQuickMessage(message);
+            
+            // Display response
+            this.displayQuickChatResponse(message, response);
+            input.value = '';
+
+        } catch (error) {
+            console.error('Quick chat error:', error);
+            this.displayQuickChatResponse(
+                message, 
+                'Entschuldigung, es gab einen Fehler. Bitte versuchen Sie es erneut.'
+            );
+        } finally {
+            this.setQuickChatLoading(false);
+            this.isTyping = false;
+        }
+    }
+
+    async sendProfileMessage(message, retryCount = 0) {
+        try {
+            const response = await fetch(`/api/profiles/${this.currentProfile._id}/chat`, {
+                method: 'POST',
+                headers: this.getAuthHeaders(),
+                body: JSON.stringify({ 
+                    message,
+                    conversationHistory: this.getCurrentConversationHistory()
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.error || 'Unbekannter Fehler');
+            }
+
+            // Update conversation history
+            this.addToConversationHistory(message, 'user');
+            this.addToConversationHistory(data.response, 'assistant');
+
+            return data.response;
+
+        } catch (error) {
+            console.error('Profile message error:', error);
+            
+            // Retry logic
+            if (retryCount < this.maxRetries) {
+                console.log(`Retrying... Attempt ${retryCount + 1}/${this.maxRetries}`);
+                await this.delay(this.retryDelay * (retryCount + 1));
+                return this.sendProfileMessage(message, retryCount + 1);
+            }
+
+            // Fallback response
+            return this.getFallbackResponse();
+        }
+    }
+
+    async sendQuickMessage(message, retryCount = 0) {
+        try {
+            const response = await fetch('/api/chat/quick', {
+                method: 'POST',
+                headers: this.getAuthHeaders(),
+                body: JSON.stringify({ 
+                    message,
+                    userContext: this.getUserContext()
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.error || 'Unbekannter Fehler');
+            }
+
+            return data.response;
+
+        } catch (error) {
+            console.error('Quick message error:', error);
+            
+            // Retry logic
+            if (retryCount < this.maxRetries) {
+                console.log(`Retrying... Attempt ${retryCount + 1}/${this.maxRetries}`);
+                await this.delay(this.retryDelay * (retryCount + 1));
+                return this.sendQuickMessage(message, retryCount + 1);
+            }
+
+            // Fallback response
+            return this.getFallbackResponse();
+        }
+    }
+
+    // ========================================
+    // PROFILE CHAT MANAGEMENT
+    // ========================================
+
+    setCurrentProfile(profile) {
+        this.currentProfile = profile;
+        
+        // Load conversation history for this profile
+        if (!this.chatHistory.has(profile._id)) {
+            this.chatHistory.set(profile._id, []);
+        }
+        
+        this.currentMessages = this.chatHistory.get(profile._id);
+        
+        // Update UI
+        this.updateChatHeader(profile);
+        this.renderConversationHistory();
+        
+        console.log(`💬 Switched to profile chat: ${profile.name}`);
+    }
+
+    updateChatHeader(profile) {
+        const title = document.getElementById('chatModalTitle');
+        if (title) {
+            title.textContent = profile.name;
+        }
+
+        const avatar = document.getElementById('chatProfileAvatar');
+        if (avatar) {
+            avatar.innerHTML = `
+                <span class="profile-emoji">${profile.emoji || '👤'}</span>
+                <div class="profile-info">
+                    <div class="profile-name">${profile.name}</div>
+                    <div class="profile-category">${profile.category || 'Allgemein'}</div>
+                </div>
+            `;
+        }
+    }
+
+    renderConversationHistory() {
+        const messagesContainer = document.getElementById('chatMessages');
+        if (!messagesContainer) return;
+
+        messagesContainer.innerHTML = '';
+
+        if (this.currentMessages.length === 0) {
+            this.showWelcomeMessage();
+        } else {
+            this.currentMessages.forEach(msg => {
+                this.addMessageToDOM(msg.content, msg.role, msg.timestamp);
+            });
+        }
+
+        this.scrollToBottom();
+    }
+
+    getCurrentConversationHistory() {
+        return this.currentMessages.slice(-10); // Last 10 messages for context
+    }
+
+    addToConversationHistory(content, role) {
+        const message = {
+            content,
+            role,
+            timestamp: new Date().toISOString()
+        };
+
+        this.currentMessages.push(message);
+
+        // Limit conversation history
+        if (this.currentMessages.length > 50) {
+            this.currentMessages = this.currentMessages.slice(-40);
+        }
+
+        // Update chat history
+        if (this.currentProfile) {
+            this.chatHistory.set(this.currentProfile._id, this.currentMessages);
+        }
+    }
+
+    // ========================================
+    // UI-MANAGEMENT
+    // ========================================
+
     addMessageToDOM(content, role, timestamp = null) {
         const container = document.getElementById('chatMessages');
+        if (!container) return;
+
         const messageDiv = document.createElement('div');
         messageDiv.className = `chat-message ${role}-message`;
         
-        const avatar = role === 'user' ? '👤' : '🤖';
+        const avatar = role === 'user' ? '👤' : (this.currentProfile?.emoji || '🤖');
         const time = timestamp ? new Date(timestamp) : new Date();
         const timeString = time.toLocaleTimeString('de-DE', {
             hour: '2-digit',
@@ -440,7 +366,7 @@ class ProfileChatManager {
             <div class="message-avatar">${avatar}</div>
             <div class="message-content">
                 <div class="message-bubble">
-                    <p class="message-text">${content}</p>
+                    <p class="message-text">${this.formatMessage(content)}</p>
                 </div>
                 <div class="message-time">${timeString}</div>
             </div>
@@ -449,22 +375,34 @@ class ProfileChatManager {
         container.appendChild(messageDiv);
         this.scrollToBottom();
         
-        // Add to current messages
-        this.currentMessages.push({
-            content,
-            role,
-            timestamp: time.toISOString()
-        });
+        // Add to current messages if not from history
+        if (!timestamp) {
+            this.addToConversationHistory(content, role);
+        }
+    }
+
+    formatMessage(content) {
+        // Basic formatting for messages
+        return content
+            .replace(/\n/g, '<br>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/`(.*?)`/g, '<code>$1</code>');
     }
 
     showTypingIndicator() {
         const container = document.getElementById('chatMessages');
+        if (!container) return;
+
+        // Remove existing typing indicator
+        this.hideTypingIndicator();
+
         const typingDiv = document.createElement('div');
         typingDiv.className = 'typing-indicator';
         typingDiv.id = 'typingIndicator';
         
         typingDiv.innerHTML = `
-            <div class="message-avatar">🤖</div>
+            <div class="message-avatar">${this.currentProfile?.emoji || '🤖'}</div>
             <div class="message-content">
                 <div class="typing-dots">
                     <div class="typing-dot"></div>
@@ -485,11 +423,231 @@ class ProfileChatManager {
         }
     }
 
+    showWelcomeMessage() {
+        const container = document.getElementById('chatMessages');
+        if (!container) return;
+
+        const welcomeDiv = document.createElement('div');
+        welcomeDiv.className = 'welcome-message';
+        
+        const profileName = this.currentProfile?.name || 'AI-Assistent';
+        const profileEmoji = this.currentProfile?.emoji || '🤖';
+        
+        welcomeDiv.innerHTML = `
+            <div class="welcome-avatar">${profileEmoji}</div>
+            <div class="welcome-content">
+                <h3>Hallo! Ich bin ${profileName}</h3>
+                <p>Wie kann ich Ihnen heute helfen? Stellen Sie mir eine Frage oder beginnen Sie ein Gespräch.</p>
+                ${this.currentProfile ? this.getProfileSuggestions() : this.getQuickSuggestions()}
+            </div>
+        `;
+        
+        container.appendChild(welcomeDiv);
+    }
+
     hideWelcomeMessage() {
         const welcomeMessage = document.querySelector('.welcome-message');
         if (welcomeMessage) {
-            welcomeMessage.style.display = 'none';
+            welcomeMessage.style.animation = 'fadeOut 0.3s ease-in forwards';
+            setTimeout(() => welcomeMessage.remove(), 300);
         }
+    }
+
+    getProfileSuggestions() {
+        if (!this.currentProfile) return '';
+        
+        const suggestions = this.getSuggestionsForProfile(this.currentProfile);
+        if (suggestions.length === 0) return '';
+        
+        const suggestionsHTML = suggestions.map(suggestion => 
+            `<button class="suggestion-btn" onclick="chatManager.sendSuggestion('${suggestion}')">${suggestion}</button>`
+        ).join('');
+        
+        return `
+            <div class="suggestions">
+                <p class="suggestions-label">Vorschläge:</p>
+                <div class="suggestions-list">${suggestionsHTML}</div>
+            </div>
+        `;
+    }
+
+    getQuickSuggestions() {
+        const suggestions = [
+            'Was sind Ihre Funktionen?',
+            'Können Sie mir helfen?',
+            'Was können Sie tun?',
+            'Erklären Sie mir etwas'
+        ];
+        
+        const suggestionsHTML = suggestions.map(suggestion => 
+            `<button class="suggestion-btn" onclick="chatManager.sendSuggestion('${suggestion}')">${suggestion}</button>`
+        ).join('');
+        
+        return `
+            <div class="suggestions">
+                <p class="suggestions-label">Schnellstart:</p>
+                <div class="suggestions-list">${suggestionsHTML}</div>
+            </div>
+        `;
+    }
+
+    getSuggestionsForProfile(profile) {
+        const categoryMap = {
+            'Gesundheit': [
+                'Erstelle einen Trainingsplan',
+                'Ernährungstipps für heute',
+                'Wie kann ich besser schlafen?',
+                'Motiviere mich zum Sport'
+            ],
+            'Technologie': [
+                'Erkläre mir ein Konzept',
+                'Code-Review bitte',
+                'Beste Praktiken zeigen',
+                'Debugging-Hilfe'
+            ],
+            'Lernen': [
+                'Lernplan erstellen',
+                'Erklär mir das Thema',
+                'Quiz zu diesem Bereich',
+                'Zusammenfassung schreiben'
+            ],
+            'Kreativität': [
+                'Brainstorming-Session',
+                'Kreative Ideen sammeln',
+                'Geschichte schreiben',
+                'Design-Inspiration'
+            ]
+        };
+        
+        return categoryMap[profile.category] || [
+            'Was können Sie für mich tun?',
+            'Zeigen Sie mir Ihre Fähigkeiten',
+            'Wie können Sie mir helfen?'
+        ];
+    }
+
+    sendSuggestion(suggestion) {
+        const input = document.getElementById('chatInput') || document.getElementById('quickChatInput');
+        if (input) {
+            input.value = suggestion;
+            input.focus();
+            
+            // Trigger send
+            setTimeout(() => {
+                if (this.currentProfile) {
+                    this.sendMessage();
+                } else {
+                    this.sendQuickChat();
+                }
+            }, 100);
+        }
+    }
+
+    scrollToBottom() {
+        const container = document.getElementById('chatMessages');
+        if (container) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+
+    // ========================================
+    // QUICK CHAT UI
+    // ========================================
+
+    setQuickChatLoading(loading) {
+        const btn = document.getElementById('quickChatBtn');
+        const input = document.getElementById('quickChatInput');
+        
+        if (btn) {
+            btn.disabled = loading;
+            btn.innerHTML = loading ? 
+                '<span class="loading-spinner"></span>' : 
+                '<span class="icon">💬</span>';
+        }
+        
+        if (input) {
+            input.disabled = loading;
+        }
+    }
+
+    displayQuickChatResponse(userMessage, response) {
+        const responseContainer = document.getElementById('quickChatResponse');
+        if (!responseContainer) return;
+
+        responseContainer.innerHTML = `
+            <div class="quick-chat-conversation">
+                <div class="quick-message user-message">
+                    <div class="message-avatar">👤</div>
+                    <div class="message-text">${userMessage}</div>
+                </div>
+                <div class="quick-message assistant-message">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-text">${this.formatMessage(response)}</div>
+                </div>
+            </div>
+        `;
+        
+        responseContainer.style.display = 'block';
+    }
+
+    // ========================================
+    // CHAT MANAGEMENT
+    // ========================================
+
+    clearCurrentChat() {
+        if (!confirm('Chat-Verlauf wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+            return;
+        }
+
+        // Clear messages
+        if (this.currentProfile) {
+            this.chatHistory.set(this.currentProfile._id, []);
+            this.currentMessages = [];
+        }
+
+        // Clear UI
+        const container = document.getElementById('chatMessages');
+        if (container) {
+            container.innerHTML = '';
+            this.showWelcomeMessage();
+        }
+
+        this.showToast('Chat-Verlauf gelöscht', 'success');
+    }
+
+    exportCurrentChat() {
+        if (this.currentMessages.length === 0) {
+            this.showToast('Kein Chat-Verlauf zum Exportieren vorhanden', 'warning');
+            return;
+        }
+
+        const exportData = {
+            profile: this.currentProfile ? {
+                name: this.currentProfile.name,
+                category: this.currentProfile.category
+            } : null,
+            exportDate: new Date().toISOString(),
+            messages: this.currentMessages.map(msg => ({
+                role: msg.role,
+                content: msg.content,
+                timestamp: msg.timestamp
+            }))
+        };
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+            type: 'application/json'
+        });
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chat-export-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        this.showToast('Chat exportiert', 'success');
     }
 
     generateChatTitle(firstMessage) {
@@ -499,119 +657,147 @@ class ProfileChatManager {
             : firstMessage;
     }
 
-    async updateChatTitleOnServer(title) {
-        try {
-            await fetch(`/api/profiles/${this.profileId}/chats/${this.currentChatId}`, {
-                method: 'PATCH',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify({ title })
-            });
-        } catch (error) {
-            console.error('Error updating chat title:', error);
+    // ========================================
+    // UTILITY METHODS
+    // ========================================
+
+    handleTyping() {
+        // Optional: Show "user is typing" indicators in group chats
+        // For now, just ensure send button is enabled/disabled
+        const input = document.getElementById('chatInput') || document.getElementById('quickChatInput');
+        const sendBtn = document.getElementById('sendMessageBtn') || document.getElementById('quickChatBtn');
+        
+        if (input && sendBtn) {
+            sendBtn.disabled = !input.value.trim() || this.isTyping;
         }
     }
 
-    updateChatTitle(title) {
-        document.getElementById('currentChatTitle').textContent = title;
-    }
-
-    clearChatMessages() {
-        const container = document.getElementById('chatMessages');
-        container.innerHTML = '';
-        this.addWelcomeMessage(container);
-        this.currentMessages = [];
-    }
-
-    async clearCurrentChat() {
-        if (!this.currentChatId) return;
+    getFallbackResponse() {
+        const fallbackResponses = [
+            "Entschuldigung, ich habe gerade technische Schwierigkeiten. Können Sie Ihre Frage später nochmal stellen?",
+            "Es tut mir leid, aber ich kann momentan nicht antworten. Bitte versuchen Sie es in einem Moment erneut.",
+            "Ich habe Probleme beim Verarbeiten Ihrer Anfrage. Bitte haben Sie einen Moment Geduld und versuchen Sie es erneut."
+        ];
         
-        if (!confirm('Möchten Sie diesen Chat wirklich löschen?')) return;
-        
-        await this.deleteChat(this.currentChatId);
+        return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
     }
 
-    async deleteChat(chatId) {
-        try {
-            const response = await fetch(`/api/profiles/${this.profileId}/chats/${chatId}`, {
-                method: 'DELETE',
-                headers: this.getAuthHeaders()
-            });
-
-            if (response.ok) {
-                // If deleting current chat, clear it
-                if (chatId === this.currentChatId) {
-                    this.currentChatId = null;
-                    this.clearChatMessages();
-                    this.updateChatTitle('Neuer Chat');
-                }
-                
-                // Reload chats
-                await this.loadChats();
-                this.showToast('Chat gelöscht', 'success');
-            } else {
-                this.showToast('Fehler beim Löschen des Chats', 'error');
+    getUserContext() {
+        return {
+            userId: localStorage.getItem('allKiUserEmail'),
+            timestamp: new Date().toISOString(),
+            sessionInfo: {
+                profileCount: dashboardManager?.profiles?.length || 0,
+                currentSection: dashboardManager?.currentSection || 'unknown'
             }
-        } catch (error) {
-            console.error('Error deleting chat:', error);
-            this.showToast('Verbindungsfehler', 'error');
-        }
-    }
-
-    async exportCurrentChat() {
-        if (!this.currentChatId || this.currentMessages.length === 0) {
-            this.showToast('Kein Chat zum Exportieren vorhanden', 'warning');
-            return;
-        }
-        
-        const chatData = {
-            profile: this.profile.name,
-            title: document.getElementById('currentChatTitle').textContent,
-            messages: this.currentMessages,
-            exportedAt: new Date().toISOString()
         };
-        
-        const blob = new Blob([JSON.stringify(chatData, null, 2)], {
-            type: 'application/json'
-        });
-        
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `chat-${this.profile.name}-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        this.showToast('Chat exportiert', 'success');
     }
 
-    scrollToBottom() {
-        const container = document.querySelector('.chat-messages-container');
-        setTimeout(() => {
-            container.scrollTop = container.scrollHeight;
-        }, 100);
+    getAuthHeaders() {
+        return {
+            'Authorization': `Bearer ${localStorage.getItem('allKiAuthToken')}`,
+            'X-User-Email': localStorage.getItem('allKiUserEmail'),
+            'Content-Type': 'application/json'
+        };
+    }
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    showError(message) {
+        console.error('Chat Error:', message);
+        this.showToast(message, 'error');
     }
 
     showToast(message, type = 'info') {
-        const toastContainer = document.getElementById('toastContainer');
+        // Use dashboard manager's toast if available
+        if (typeof dashboardManager !== 'undefined' && dashboardManager.showToast) {
+            dashboardManager.showToast(message, type);
+            return;
+        }
+
+        // Fallback toast implementation
+        const container = document.getElementById('toast-container') || document.body;
         
         const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        
-        toastContainer.appendChild(toast);
-        
-        // Auto remove after 3 seconds
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <div class="toast-content">
+                <span class="toast-icon">${this.getToastIcon(type)}</span>
+                <span class="toast-message">${message}</span>
+            </div>
+            <button class="toast-close">✕</button>
+        `;
+
+        container.appendChild(toast);
+
+        // Auto-remove
         setTimeout(() => {
-            if (toast.parentNode) {
-                toast.remove();
-            }
-        }, 3000);
+            toast.style.animation = 'toastSlideOut 0.3s ease-in forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+
+        // Manual close
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            toast.style.animation = 'toastSlideOut 0.3s ease-in forwards';
+            setTimeout(() => toast.remove(), 300);
+        });
+    }
+
+    getToastIcon(type) {
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        return icons[type] || icons.info;
+    }
+
+    // ========================================
+    // PUBLIC API METHODS
+    // ========================================
+
+    // Method to be called by dashboard when starting a profile chat
+    startProfileChat(profile) {
+        this.setCurrentProfile(profile);
+    }
+
+    // Method to be called when leaving a chat
+    leaveChat() {
+        this.currentProfile = null;
+        this.currentMessages = [];
+        this.initializeChatInterface();
+    }
+
+    // Method to check if chat is active
+    isChatActive() {
+        return this.currentProfile !== null;
+    }
+
+    // Method to get current chat stats
+    getChatStats() {
+        return {
+            currentProfile: this.currentProfile?.name || null,
+            messageCount: this.currentMessages.length,
+            totalProfiles: this.chatHistory.size,
+            isTyping: this.isTyping
+        };
     }
 }
 
+// Global instance
+let chatManager;
+
 // Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    window.profileChatManager = new ProfileChatManager();
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('💬 Chat system loading...');
+    
+    // Initialize chat manager
+    chatManager = new ChatManager();
+    console.log('✅ Chat Manager initialized');
+    
+    // Make it available globally for dashboard integration
+    window.chatManager = chatManager;
 });
