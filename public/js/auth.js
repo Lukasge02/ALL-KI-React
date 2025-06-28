@@ -1,5 +1,5 @@
 /**
- * 🔐 AUTH JAVASCRIPT
+ * 🔐 AUTH JAVASCRIPT - VOLLSTÄNDIG FUNKTIONAL
  * Login und Registrierung Funktionalität
  * 
  * SEPARATION OF CONCERNS:
@@ -15,8 +15,19 @@ class AuthManager {
         this.currentForm = 'login';
         this.isLoading = false;
         
+        // Wait for DOM to be loaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.initialize());
+        } else {
+            this.initialize();
+        }
+    }
+
+    initialize() {
+        console.log('🔐 AuthManager: Initializing...');
         this.initializeEventListeners();
         this.loadStoredData();
+        console.log('✅ AuthManager: Ready');
     }
 
     // ========================================
@@ -25,15 +36,21 @@ class AuthManager {
 
     initializeEventListeners() {
         // Form submissions
-        const loginForm = document.getElementById('loginForm');
-        const registerForm = document.getElementById('registerForm');
+        const loginForm = document.querySelector('#loginForm form');
+        const registerForm = document.querySelector('#registerForm form');
         
         if (loginForm) {
             loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+            console.log('✅ Login form listener attached');
+        } else {
+            console.warn('⚠️ Login form not found');
         }
         
         if (registerForm) {
             registerForm.addEventListener('submit', (e) => this.handleRegister(e));
+            console.log('✅ Register form listener attached');
+        } else {
+            console.warn('⚠️ Register form not found');
         }
 
         // Form toggle buttons
@@ -41,11 +58,23 @@ class AuthManager {
         const toggleToLogin = document.getElementById('toggleToLogin');
         
         if (toggleToRegister) {
-            toggleToRegister.addEventListener('click', () => this.switchToRegister());
+            toggleToRegister.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.switchToRegister();
+            });
+            console.log('✅ Toggle to register listener attached');
+        } else {
+            console.warn('⚠️ Toggle to register button not found');
         }
         
         if (toggleToLogin) {
-            toggleToLogin.addEventListener('click', () => this.switchToLogin());
+            toggleToLogin.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.switchToLogin();
+            });
+            console.log('✅ Toggle to login listener attached');
+        } else {
+            console.warn('⚠️ Toggle to login button not found');
         }
 
         // Real-time validation
@@ -62,6 +91,8 @@ class AuthManager {
             input.addEventListener('blur', () => this.validateField(input));
             input.addEventListener('input', () => this.clearErrors(input));
         });
+        
+        console.log(`✅ Real-time validation setup for ${inputs.length} inputs`);
     }
 
     // ========================================
@@ -69,6 +100,7 @@ class AuthManager {
     // ========================================
 
     switchToRegister() {
+        console.log('🔄 Switching to register form');
         const loginForm = document.getElementById('loginForm');
         const registerForm = document.getElementById('registerForm');
         
@@ -76,10 +108,15 @@ class AuthManager {
             loginForm.classList.add('hidden');
             registerForm.classList.remove('hidden');
             this.currentForm = 'register';
+            this.clearAllErrors();
+            console.log('✅ Switched to register form');
+        } else {
+            console.error('❌ Could not find login or register form elements');
         }
     }
 
     switchToLogin() {
+        console.log('🔄 Switching to login form');
         const loginForm = document.getElementById('loginForm');
         const registerForm = document.getElementById('registerForm');
         
@@ -87,6 +124,10 @@ class AuthManager {
             registerForm.classList.add('hidden');
             loginForm.classList.remove('hidden');
             this.currentForm = 'login';
+            this.clearAllErrors();
+            console.log('✅ Switched to login form');
+        } else {
+            console.error('❌ Could not find login or register form elements');
         }
     }
 
@@ -96,8 +137,12 @@ class AuthManager {
 
     async handleLogin(event) {
         event.preventDefault();
+        console.log('🔑 Handling login...');
         
-        if (this.isLoading) return;
+        if (this.isLoading) {
+            console.log('⚠️ Already loading, ignoring login attempt');
+            return;
+        }
 
         const formData = new FormData(event.target);
         const loginData = {
@@ -105,15 +150,20 @@ class AuthManager {
             password: formData.get('password')
         };
 
+        console.log('📝 Login data:', { email: loginData.email, password: '***' });
+
         // Validate form
         if (!this.validateLoginForm(loginData)) {
+            console.log('❌ Login validation failed');
             return;
         }
 
         this.setLoadingState(true);
 
         try {
+            console.log('📡 Sending login request...');
             const response = await this.apiCall('/api/auth/login', 'POST', loginData);
+            console.log('📡 Login response:', response);
             
             if (response.success) {
                 this.handleLoginSuccess(response);
@@ -122,7 +172,7 @@ class AuthManager {
             }
             
         } catch (error) {
-            console.error('Login error:', error);
+            console.error('❌ Login error:', error);
             this.showError('Verbindungsfehler. Bitte versuchen Sie es später erneut.');
         } finally {
             this.setLoadingState(false);
@@ -131,8 +181,12 @@ class AuthManager {
 
     async handleRegister(event) {
         event.preventDefault();
+        console.log('👤 Handling registration...');
         
-        if (this.isLoading) return;
+        if (this.isLoading) {
+            console.log('⚠️ Already loading, ignoring register attempt');
+            return;
+        }
 
         const formData = new FormData(event.target);
         const registerData = {
@@ -143,15 +197,26 @@ class AuthManager {
             confirmPassword: formData.get('confirmPassword')
         };
 
+        console.log('📝 Register data:', { 
+            firstName: registerData.firstName,
+            lastName: registerData.lastName, 
+            email: registerData.email, 
+            password: '***',
+            confirmPassword: '***'
+        });
+
         // Validate form
         if (!this.validateRegisterForm(registerData)) {
+            console.log('❌ Register validation failed');
             return;
         }
 
         this.setLoadingState(true);
 
         try {
+            console.log('📡 Sending register request...');
             const response = await this.apiCall('/api/auth/register', 'POST', registerData);
+            console.log('📡 Register response:', response);
             
             if (response.success) {
                 this.handleRegisterSuccess(response);
@@ -160,7 +225,7 @@ class AuthManager {
             }
             
         } catch (error) {
-            console.error('Register error:', error);
+            console.error('❌ Register error:', error);
             this.showError('Verbindungsfehler. Bitte versuchen Sie es später erneut.');
         } finally {
             this.setLoadingState(false);
@@ -173,6 +238,9 @@ class AuthManager {
 
     validateLoginForm(data) {
         let isValid = true;
+
+        // Clear previous errors
+        this.clearAllErrors();
 
         // Email validation
         if (!data.email || !this.isValidEmail(data.email)) {
@@ -191,6 +259,9 @@ class AuthManager {
 
     validateRegisterForm(data) {
         let isValid = true;
+
+        // Clear previous errors
+        this.clearAllErrors();
 
         // First name validation
         if (!data.firstName || data.firstName.trim().length < 2) {
@@ -222,6 +293,13 @@ class AuthManager {
             isValid = false;
         }
 
+        // Terms acceptance (check if checkbox exists and is checked)
+        const acceptTerms = document.getElementById('acceptTerms');
+        if (acceptTerms && !acceptTerms.checked) {
+            this.showError('Bitte akzeptieren Sie die AGB und Datenschutzerklärung');
+            isValid = false;
+        }
+
         return isValid;
     }
 
@@ -246,6 +324,13 @@ class AuthManager {
             case 'lastName':
                 if (value.length < 2) {
                     this.showFieldError(fieldName, 'Mindestens 2 Zeichen erforderlich');
+                    return false;
+                }
+                break;
+            case 'confirmPassword':
+                const passwordField = document.querySelector('input[name="password"]');
+                if (passwordField && value !== passwordField.value) {
+                    this.showFieldError(fieldName, 'Passwörter stimmen nicht überein');
                     return false;
                 }
                 break;
@@ -277,6 +362,11 @@ class AuthManager {
         }
 
         const response = await fetch(url, options);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         return await response.json();
     }
 
@@ -285,24 +375,32 @@ class AuthManager {
     // ========================================
 
     handleLoginSuccess(response) {
+        console.log('✅ Login successful:', response);
+        
         // Store user data
         if (response.token) {
             localStorage.setItem('authToken', response.token);
+            console.log('💾 Token stored');
         }
         
         if (response.user) {
             localStorage.setItem('userData', JSON.stringify(response.user));
+            localStorage.setItem('lastEmail', response.user.email);
+            console.log('💾 User data stored');
         }
 
         this.showSuccess('Erfolgreich angemeldet! Weiterleitung...');
 
         // Redirect to dashboard
         setTimeout(() => {
+            console.log('🔄 Redirecting to dashboard...');
             window.location.href = '/dashboard';
         }, 1500);
     }
 
     handleRegisterSuccess(response) {
+        console.log('✅ Registration successful:', response);
+        
         this.showSuccess('Registrierung erfolgreich! Sie können sich jetzt anmelden.');
         
         // Switch to login form
@@ -310,10 +408,11 @@ class AuthManager {
             this.switchToLogin();
             
             // Pre-fill email if available
-            if (response.email) {
+            if (response.email || response.user?.email) {
                 const emailInput = document.querySelector('#loginForm input[name="email"]');
                 if (emailInput) {
-                    emailInput.value = response.email;
+                    emailInput.value = response.email || response.user.email;
+                    console.log('📧 Email pre-filled in login form');
                 }
             }
         }, 2000);
@@ -331,53 +430,72 @@ class AuthManager {
         
         submitBtns.forEach(btn => {
             btn.disabled = loading;
-            btn.textContent = loading ? 'Wird verarbeitet...' : 
-                (btn.closest('#loginForm') ? 'Anmelden' : 'Registrieren');
+            if (loading) {
+                btn.textContent = 'Wird verarbeitet...';
+            } else {
+                // Reset button text based on current form
+                if (btn.closest('#loginForm')) {
+                    btn.textContent = 'Anmelden';
+                } else if (btn.closest('#registerForm')) {
+                    btn.textContent = 'Registrieren';
+                }
+            }
         });
         
         forms.forEach(form => {
             form.classList.toggle('form-loading', loading);
         });
+        
+        console.log(`🔄 Loading state: ${loading}`);
     }
 
     showError(message, fieldName = null) {
+        console.log('❌ Showing error:', message, fieldName);
+        
         if (fieldName) {
             this.showFieldError(fieldName, message);
         } else {
             // Show general error
-            const existingError = document.querySelector('.general-error');
-            if (existingError) {
-                existingError.remove();
-            }
+            this.clearGeneralMessages();
 
             const errorDiv = document.createElement('div');
-            errorDiv.className = 'general-error error-message';
+            errorDiv.className = 'general-error';
             errorDiv.textContent = message;
             
             const activeForm = document.querySelector('.auth-form:not(.hidden)');
             if (activeForm) {
-                activeForm.insertBefore(errorDiv, activeForm.firstChild);
+                const formHeader = activeForm.querySelector('.form-header');
+                if (formHeader) {
+                    formHeader.insertAdjacentElement('afterend', errorDiv);
+                }
             }
         }
     }
 
     showSuccess(message) {
-        const existingMessages = document.querySelectorAll('.general-error, .general-success');
-        existingMessages.forEach(msg => msg.remove());
+        console.log('✅ Showing success:', message);
+        
+        this.clearGeneralMessages();
 
         const successDiv = document.createElement('div');
-        successDiv.className = 'general-success success-message';
+        successDiv.className = 'general-success';
         successDiv.textContent = message;
         
         const activeForm = document.querySelector('.auth-form:not(.hidden)');
         if (activeForm) {
-            activeForm.insertBefore(successDiv, activeForm.firstChild);
+            const formHeader = activeForm.querySelector('.form-header');
+            if (formHeader) {
+                formHeader.insertAdjacentElement('afterend', successDiv);
+            }
         }
     }
 
     showFieldError(fieldName, message) {
         const input = document.querySelector(`input[name="${fieldName}"]`);
-        if (!input) return;
+        if (!input) {
+            console.warn(`⚠️ Field not found: ${fieldName}`);
+            return;
+        }
 
         input.classList.add('form-error');
         
@@ -414,6 +532,25 @@ class AuthManager {
         }
     }
 
+    clearAllErrors() {
+        // Clear field errors
+        const errorInputs = document.querySelectorAll('.form-error');
+        errorInputs.forEach(input => {
+            input.classList.remove('form-error');
+        });
+
+        const errorMessages = document.querySelectorAll('.error-message');
+        errorMessages.forEach(error => error.remove());
+
+        // Clear general messages
+        this.clearGeneralMessages();
+    }
+
+    clearGeneralMessages() {
+        const existingMessages = document.querySelectorAll('.general-error, .general-success');
+        existingMessages.forEach(msg => msg.remove());
+    }
+
     // ========================================
     // AUTO-LOGIN & STORAGE
     // ========================================
@@ -423,8 +560,11 @@ class AuthManager {
         const userData = localStorage.getItem('userData');
         
         if (token && userData) {
+            console.log('🔍 Found stored credentials, validating...');
             // Check if token is still valid
             this.validateStoredToken(token);
+        } else {
+            console.log('ℹ️ No stored credentials found');
         }
     }
 
@@ -433,13 +573,16 @@ class AuthManager {
             const response = await this.apiCall('/api/auth/validate', 'POST', { token });
             
             if (response.valid) {
+                console.log('✅ Token is valid, redirecting to dashboard');
                 // Token is valid, redirect to dashboard
                 window.location.href = '/dashboard';
             } else {
+                console.log('❌ Token is invalid, clearing storage');
                 // Token is invalid, clear storage
                 this.clearStoredData();
             }
         } catch (error) {
+            console.log('❌ Error validating token, clearing storage');
             // Error validating token, clear storage
             this.clearStoredData();
         }
@@ -449,9 +592,10 @@ class AuthManager {
         // Pre-fill email if available
         const lastEmail = localStorage.getItem('lastEmail');
         if (lastEmail) {
-            const emailInput = document.querySelector('input[name="email"]');
+            const emailInput = document.querySelector('#loginForm input[name="email"]');
             if (emailInput) {
                 emailInput.value = lastEmail;
+                console.log('📧 Last email loaded:', lastEmail);
             }
         }
     }
@@ -459,6 +603,7 @@ class AuthManager {
     clearStoredData() {
         localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
+        console.log('🗑️ Stored auth data cleared');
     }
 }
 
@@ -466,11 +611,11 @@ class AuthManager {
 // INITIALIZATION
 // ========================================
 
-document.addEventListener('DOMContentLoaded', () => {
-    new AuthManager();
-});
+// Initialize AuthManager when script loads
+console.log('🚀 Starting AuthManager...');
+const authManager = new AuthManager();
 
-// Export for testing
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = AuthManager;
+// Export for testing (if needed)
+if (typeof window !== 'undefined') {
+    window.authManager = authManager;
 }

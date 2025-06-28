@@ -1,122 +1,754 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="dark">
 <head>
+    <!-- ========================================
+         META TAGS & VIEWPORT
+         ======================================== -->
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>All-KI - Profil Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="description" content="All-KI Chat - Intelligente Gespräche mit KI-Power">
+    <meta name="keywords" content="KI Chat, AI Assistant, ChatGPT, OpenAI, Conversation">
+    <meta name="author" content="All-KI Team">
+    <meta name="robots" content="noindex, nofollow">
+    
+    <!-- ========================================
+         PWA MANIFEST & ICONS
+         ======================================== -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="All-KI Chat">
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    
+    <!-- ========================================
+         PRECONNECT & PREFETCH
+         ======================================== -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://api.openai.com">
+    
+    <!-- ========================================
+         FONTS
+         ======================================== -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/chat.css">
+    
+    <!-- ========================================
+         STYLES
+         ======================================== -->
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <link rel="stylesheet" href="/css/chat.css">
+    
+    <!-- ========================================
+         TITLE
+         ======================================== -->
+    <title>All-KI Chat - Intelligente Gespräche</title>
+    
+    <!-- ========================================
+         SECURITY & PERFORMANCE
+         ======================================== -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
 </head>
+
 <body>
-    <div class="chat-container">
-        <!-- Chat Sidebar -->
-        <div class="chat-sidebar">
-            <div class="sidebar-header">
-                <button class="back-btn" id="backToDashboard">
-                    <span>←</span>
-                    <span>Dashboard</span>
+    <!-- ========================================
+         MAIN CHAT CONTAINER
+         ======================================== -->
+    <div class="chat-container" id="chatContainer">
+        
+        <!-- ========================================
+             CHAT SIDEBAR
+             ======================================== -->
+        <aside class="chat-sidebar" id="chatSidebar">
+            <!-- Sidebar Header -->
+            <div class="chat-sidebar-header">
+                <div class="back-to-dashboard">
+                    <a href="/dashboard" class="back-btn" title="Zurück zum Dashboard">
+                        <span class="icon">←</span>
+                        <span class="text">Dashboard</span>
+                    </a>
+                </div>
+                
+                <h2 class="sidebar-title">Chats</h2>
+                
+                <button class="new-chat-btn" id="newChatBtn" title="Neuer Chat">
+                    <span class="icon">➕</span>
                 </button>
-                <div class="profile-info" id="profileInfo">
-                    <div class="profile-avatar">🎯</div>
-                    <div class="profile-details">
-                        <h3 id="profileName">Profil wird geladen...</h3>
-                        <p id="profileCategory">Kategorie</p>
+            </div>
+            
+            <!-- Profile Selector -->
+            <div class="profile-selector" id="profileSelector">
+                <label for="profileSelect" class="profile-label">KI-Profil auswählen:</label>
+                <select id="profileSelect" class="profile-select">
+                    <option value="">Allgemeiner Chat</option>
+                    <!-- Profile werden dynamisch geladen -->
+                </select>
+                <button class="manage-profiles-btn" onclick="window.open('/dashboard#profiles', '_blank')" title="Profile verwalten">
+                    <span class="icon">⚙️</span>
+                </button>
+            </div>
+            
+            <!-- Chat List -->
+            <div class="chat-list-container">
+                <div class="chat-list-header">
+                    <h3>Verlauf</h3>
+                    <div class="chat-list-actions">
+                        <button class="search-chats-btn" id="searchChatsBtn" title="Chats durchsuchen">
+                            <span class="icon">🔍</span>
+                        </button>
+                        <button class="filter-chats-btn" id="filterChatsBtn" title="Chats filtern">
+                            <span class="icon">🔽</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Search Bar (hidden by default) -->
+                <div class="chat-search" id="chatSearch" style="display: none;">
+                    <input type="text" placeholder="Chats durchsuchen..." id="chatSearchInput">
+                </div>
+                
+                <!-- Filter Options (hidden by default) -->
+                <div class="chat-filters" id="chatFilters" style="display: none;">
+                    <div class="filter-group">
+                        <label>Zeitraum:</label>
+                        <select id="timeFilter">
+                            <option value="all">Alle</option>
+                            <option value="today">Heute</option>
+                            <option value="week">Diese Woche</option>
+                            <option value="month">Dieser Monat</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Profil:</label>
+                        <select id="profileFilter">
+                            <option value="all">Alle Profile</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Chat List -->
+                <div class="chat-list" id="chatList">
+                    <!-- Chats werden dynamisch geladen -->
+                    <div class="chat-list-placeholder">
+                        <div class="placeholder-icon">💬</div>
+                        <div class="placeholder-text">Noch keine Chats vorhanden</div>
+                        <div class="placeholder-subtext">Starten Sie eine Unterhaltung!</div>
                     </div>
                 </div>
             </div>
-
-            <div class="new-chat-section">
-                <button class="new-chat-btn" id="newChatBtn">
-                    <span>+</span>
-                    <span>Neuer Chat</span>
-                </button>
-            </div>
-
-            <div class="chat-history" id="chatHistory">
-                <div class="history-section">
-                    <h4>Heute</h4>
-                    <div class="chat-items" id="todayChats"></div>
+            
+            <!-- Sidebar Footer -->
+            <div class="chat-sidebar-footer">
+                <div class="usage-stats" id="usageStats">
+                    <div class="stat">
+                        <span class="stat-label">Nachrichten heute:</span>
+                        <span class="stat-value" id="messagesCount">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Tokens verbraucht:</span>
+                        <span class="stat-value" id="tokensCount">0</span>
+                    </div>
                 </div>
-                <div class="history-section">
-                    <h4>Gestern</h4>
-                    <div class="chat-items" id="yesterdayChats"></div>
-                </div>
-                <div class="history-section">
-                    <h4>Letzte 7 Tage</h4>
-                    <div class="chat-items" id="weekChats"></div>
-                </div>
-                <div class="history-section">
-                    <h4>Älter</h4>
-                    <div class="chat-items" id="olderChats"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Chat Area -->
-        <div class="chat-main">
-            <div class="chat-header">
-                <div class="chat-title">
-                    <h2 id="currentChatTitle">Neuer Chat</h2>
-                    <p id="currentChatSubtitle">Starten Sie eine Unterhaltung mit Ihrem KI-Assistenten</p>
-                </div>
-                <div class="chat-actions">
-                    <button class="action-btn" id="clearChatBtn" title="Chat löschen">
-                        🗑️
+                
+                <div class="sidebar-actions">
+                    <button class="export-chat-btn" id="exportChatBtn" title="Chat exportieren">
+                        <span class="icon">📤</span>
+                        <span class="text">Exportieren</span>
                     </button>
-                    <button class="action-btn" id="exportChatBtn" title="Chat exportieren">
-                        📤
+                    <button class="settings-btn" onclick="window.open('/dashboard#settings', '_blank')" title="Einstellungen">
+                        <span class="icon">⚙️</span>
+                        <span class="text">Einstellungen</span>
                     </button>
                 </div>
             </div>
-
-            <div class="chat-messages-container">
-                <div class="chat-messages" id="chatMessages">
-                    <!-- Welcome Message -->
-                    <div class="welcome-message">
-                        <div class="welcome-avatar">🤖</div>
-                        <div class="welcome-content">
-                            <h3>Willkommen zu Ihrem persönlichen KI-Assistenten!</h3>
-                            <p>Ich kenne Ihr Profil und kann Ihnen gezielt helfen. Stellen Sie mir eine Frage oder bitten Sie mich um Unterstützung.</p>
-                            <div class="suggestion-chips">
-                                <button class="suggestion-chip">Wie kann ich meine Ziele erreichen?</button>
-                                <button class="suggestion-chip">Gib mir einen Tipp für heute</button>
-                                <button class="suggestion-chip">Was weißt du über mich?</button>
+        </aside>
+        
+        <!-- ========================================
+             MAIN CHAT AREA
+             ======================================== -->
+        <main class="chat-main">
+            <!-- Chat Header -->
+            <header class="chat-header">
+                <div class="chat-header-left">
+                    <button class="mobile-sidebar-toggle" id="mobileSidebarToggle" aria-label="Chat-Liste öffnen">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </button>
+                    
+                    <div class="chat-info">
+                        <h1 class="chat-title" id="chatTitle">Neuer Chat</h1>
+                        <div class="chat-subtitle" id="chatSubtitle">
+                            <span class="profile-name" id="currentProfileName">Allgemeiner Chat</span>
+                            <span class="separator">•</span>
+                            <span class="message-count" id="messageCount">0 Nachrichten</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chat-header-right">
+                    <!-- Connection Status -->
+                    <div class="connection-status" id="connectionStatus">
+                        <div class="status-indicator online"></div>
+                        <span class="status-text">Online</span>
+                    </div>
+                    
+                    <!-- Chat Actions -->
+                    <div class="chat-actions">
+                        <button class="chat-action-btn" id="shareBtn" title="Chat teilen">
+                            <span class="icon">🔗</span>
+                        </button>
+                        
+                        <button class="chat-action-btn" id="printBtn" title="Chat drucken">
+                            <span class="icon">🖨️</span>
+                        </button>
+                        
+                        <button class="chat-action-btn" id="moreActionsBtn" title="Mehr Aktionen">
+                            <span class="icon">⋮</span>
+                        </button>
+                    </div>
+                    
+                    <!-- More Actions Dropdown -->
+                    <div class="dropdown-menu" id="moreActionsDropdown">
+                        <button class="dropdown-item" onclick="chat.editChatTitle()">
+                            <span class="icon">✏️</span>
+                            <span>Titel bearbeiten</span>
+                        </button>
+                        <button class="dropdown-item" onclick="chat.archiveChat()">
+                            <span class="icon">📦</span>
+                            <span>Archivieren</span>
+                        </button>
+                        <button class="dropdown-item" onclick="chat.exportChat()">
+                            <span class="icon">📤</span>
+                            <span>Exportieren</span>
+                        </button>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item danger" onclick="chat.deleteChat()">
+                            <span class="icon">🗑️</span>
+                            <span>Löschen</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- ========================================
+                 CHAT MESSAGES AREA
+                 ======================================== -->
+            <div class="chat-messages-container" id="messagesContainer">
+                <!-- Welcome Message -->
+                <div class="welcome-message" id="welcomeMessage">
+                    <div class="welcome-avatar">🤖</div>
+                    <div class="welcome-content">
+                        <h3>Willkommen bei All-KI Chat!</h3>
+                        <p>Ich bin Ihr intelligenter Assistent und helfe Ihnen bei allen Fragen.</p>
+                        <div class="welcome-suggestions">
+                            <button class="suggestion-btn" onclick="chat.sendSuggestedMessage('Erkläre mir, wie All-KI funktioniert')">
+                                📚 Wie funktioniert All-KI?
+                            </button>
+                            <button class="suggestion-btn" onclick="chat.sendSuggestedMessage('Hilf mir bei einem kreativen Projekt')">
+                                🎨 Kreatives Projekt
+                            </button>
+                            <button class="suggestion-btn" onclick="chat.sendSuggestedMessage('Erstelle einen Arbeitsplan für heute')">
+                                📋 Arbeitsplan erstellen
+                            </button>
+                            <button class="suggestion-btn" onclick="chat.sendSuggestedMessage('Gib mir Tipps für gesunde Ernährung')">
+                                🥗 Gesunde Ernährung
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Messages will be inserted here dynamically -->
+                
+                <!-- Typing Indicator (hidden by default) -->
+                <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                    <div class="message message-assistant">
+                        <div class="message-content">
+                            <div class="message-avatar">🤖</div>
+                            <div class="message-body">
+                                <div class="typing-dots">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <div class="chat-input-area">
-                <div class="input-container">
-                    <div class="input-wrapper">
-                        <textarea 
-                            id="messageInput" 
-                            placeholder="Schreiben Sie eine Nachricht..."
-                            rows="1"
-                            maxlength="2000"></textarea>
-                        <button class="send-btn" id="sendBtn" disabled>
-                            <span class="send-icon">↗</span>
+            
+            <!-- ========================================
+                 CHAT INPUT AREA
+                 ======================================== -->
+            <div class="chat-input-container">
+                <!-- Input Controls -->
+                <div class="input-controls">
+                    <div class="input-left">
+                        <!-- File Upload -->
+                        <input type="file" id="fileInput" multiple accept="image/*,.pdf,.txt,.docx,.doc" style="display: none;">
+                        <button class="input-btn" id="fileButton" title="Datei anhängen">
+                            <span class="icon">📎</span>
+                        </button>
+                        
+                        <!-- Voice Input -->
+                        <button class="input-btn voice-btn" id="voiceButton" title="Spracheingabe (Halten zum Aufnehmen)">
+                            <span class="icon">🎤</span>
+                        </button>
+                        
+                        <!-- Emoji Picker -->
+                        <button class="input-btn" id="emojiButton" title="Emoji auswählen">
+                            <span class="icon">😊</span>
                         </button>
                     </div>
-                    <div class="input-footer">
-                        <span class="char-count" id="charCount">0/2000</span>
-                        <span class="ai-model">GPT-4o-mini</span>
+                    
+                    <div class="input-right">
+                        <!-- AI Settings -->
+                        <button class="input-btn" id="aiSettingsBtn" title="KI-Einstellungen">
+                            <span class="icon">🧠</span>
+                        </button>
+                        
+                        <!-- Quick Actions -->
+                        <button class="input-btn" id="quickActionsBtn" title="Schnelle Aktionen">
+                            <span class="icon">⚡</span>
+                        </button>
                     </div>
+                </div>
+                
+                <!-- Main Input Area -->
+                <div class="input-area">
+                    <div class="message-input-wrapper">
+                        <textarea 
+                            id="messageInput" 
+                            class="message-input" 
+                            placeholder="Schreiben Sie Ihre Nachricht... (Enter zum Senden, Shift+Enter für neue Zeile)"
+                            rows="1"
+                            maxlength="4000"
+                            autocomplete="off"
+                            spellcheck="true"
+                        ></textarea>
+                        
+                        <!-- Character Counter -->
+                        <div class="character-counter" id="characterCounter">
+                            <span id="charCount">0</span>/<span id="charLimit">4000</span>
+                        </div>
+                        
+                        <!-- Send Button -->
+                        <button class="send-button" id="sendButton" disabled title="Nachricht senden">
+                            <span class="icon">➤</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Input Enhancement Bar -->
+                    <div class="input-enhancement-bar" id="inputEnhancementBar">
+                        <div class="enhancement-left">
+                            <!-- Language Detection -->
+                            <span class="language-indicator" id="languageIndicator">DE</span>
+                            
+                            <!-- Suggestion Count -->
+                            <span class="suggestion-count" id="suggestionCount" style="display: none;">
+                                3 Vorschläge verfügbar
+                            </span>
+                        </div>
+                        
+                        <div class="enhancement-right">
+                            <!-- Voice Recording Status -->
+                            <div class="recording-status" id="recordingStatus" style="display: none;">
+                                <span class="recording-dot"></span>
+                                <span class="recording-text">Aufnahme läuft...</span>
+                                <span class="recording-duration" id="recordingDuration">00:00</span>
+                            </div>
+                            
+                            <!-- Shortcuts Hint -->
+                            <span class="shortcuts-hint">
+                                <kbd>Enter</kbd> senden • <kbd>Shift+Enter</kbd> neue Zeile
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- ========================================
+             EMOJI PICKER (hidden by default)
+             ======================================== -->
+        <div class="emoji-picker" id="emojiPicker">
+            <div class="emoji-header">
+                <div class="emoji-categories">
+                    <button class="emoji-category active" data-category="recent">🕐</button>
+                    <button class="emoji-category" data-category="people">😊</button>
+                    <button class="emoji-category" data-category="nature">🌍</button>
+                    <button class="emoji-category" data-category="food">🍕</button>
+                    <button class="emoji-category" data-category="activity">⚽</button>
+                    <button class="emoji-category" data-category="travel">✈️</button>
+                    <button class="emoji-category" data-category="objects">💡</button>
+                    <button class="emoji-category" data-category="symbols">🔤</button>
+                </div>
+                <button class="emoji-close" onclick="chat.hideEmojiPicker()">×</button>
+            </div>
+            
+            <div class="emoji-search">
+                <input type="text" placeholder="Emoji suchen..." id="emojiSearch">
+            </div>
+            
+            <div class="emoji-grid" id="emojiGrid">
+                <!-- Emojis werden dynamisch geladen -->
+            </div>
+        </div>
+        
+        <!-- ========================================
+             AI SETTINGS PANEL (hidden by default)
+             ======================================== -->
+        <div class="ai-settings-panel" id="aiSettingsPanel">
+            <div class="panel-header">
+                <h3>KI-Einstellungen</h3>
+                <button class="panel-close" onclick="chat.hideAiSettings()">×</button>
+            </div>
+            
+            <div class="panel-content">
+                <div class="setting-group">
+                    <label for="temperatureSetting">Kreativität (Temperature):</label>
+                    <input type="range" id="temperatureSetting" min="0" max="2" step="0.1" value="0.7">
+                    <span class="setting-value" id="temperatureValue">0.7</span>
+                </div>
+                
+                <div class="setting-group">
+                    <label for="maxTokensSetting">Maximale Antwortlänge:</label>
+                    <input type="range" id="maxTokensSetting" min="100" max="4000" step="100" value="2000">
+                    <span class="setting-value" id="maxTokensValue">2000</span>
+                </div>
+                
+                <div class="setting-group">
+                    <label for="modelSetting">KI-Modell:</label>
+                    <select id="modelSetting">
+                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Schnell)</option>
+                        <option value="gpt-4">GPT-4 (Präzise)</option>
+                        <option value="claude">Claude (Alternative)</option>
+                    </select>
+                </div>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="contextMemory" checked>
+                        Kontext merken
+                    </label>
+                    <small>Vorherige Nachrichten in die Antwort einbeziehen</small>
+                </div>
+                
+                <div class="setting-group">
+                    <label>
+                        <input type="checkbox" id="suggestionsEnabled" checked>
+                        Antwortvorschläge anzeigen
+                    </label>
+                    <small>Automatische Vorschläge für Follow-up Fragen</small>
+                </div>
+            </div>
+            
+            <div class="panel-footer">
+                <button class="btn-secondary" onclick="chat.resetAiSettings()">Zurücksetzen</button>
+                <button class="btn-primary" onclick="chat.saveAiSettings()">Speichern</button>
+            </div>
+        </div>
+        
+        <!-- ========================================
+             QUICK ACTIONS PANEL (hidden by default)
+             ======================================== -->
+        <div class="quick-actions-panel" id="quickActionsPanel">
+            <div class="panel-header">
+                <h3>Schnelle Aktionen</h3>
+                <button class="panel-close" onclick="chat.hideQuickActions()">×</button>
+            </div>
+            
+            <div class="panel-content">
+                <div class="quick-action-grid">
+                    <button class="quick-action-btn" onclick="chat.quickAction('summarize')">
+                        <span class="icon">📝</span>
+                        <span class="text">Zusammenfassen</span>
+                    </button>
+                    
+                    <button class="quick-action-btn" onclick="chat.quickAction('translate')">
+                        <span class="icon">🌐</span>
+                        <span class="text">Übersetzen</span>
+                    </button>
+                    
+                    <button class="quick-action-btn" onclick="chat.quickAction('explain')">
+                        <span class="icon">💡</span>
+                        <span class="text">Erklären</span>
+                    </button>
+                    
+                    <button class="quick-action-btn" onclick="chat.quickAction('improve')">
+                        <span class="icon">✨</span>
+                        <span class="text">Verbessern</span>
+                    </button>
+                    
+                    <button class="quick-action-btn" onclick="chat.quickAction('proofread')">
+                        <span class="icon">✅</span>
+                        <span class="text">Korrekturlesen</span>
+                    </button>
+                    
+                    <button class="quick-action-btn" onclick="chat.quickAction('brainstorm')">
+                        <span class="icon">🧠</span>
+                        <span class="text">Brainstorming</span>
+                    </button>
+                    
+                    <button class="quick-action-btn" onclick="chat.quickAction('format')">
+                        <span class="icon">📐</span>
+                        <span class="text">Formatieren</span>
+                    </button>
+                    
+                    <button class="quick-action-btn" onclick="chat.quickAction('research')">
+                        <span class="icon">🔍</span>
+                        <span class="text">Recherche</span>
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Loading Overlay -->
-    <div class="loading-overlay hidden" id="loadingOverlay">
-        <div class="loading-spinner"></div>
-        <p>KI denkt nach...</p>
+    
+    <!-- ========================================
+         MODALS & OVERLAYS
+         ======================================== -->
+    
+    <!-- File Preview Modal -->
+    <div class="modal" id="filePreviewModal">
+        <div class="modal-overlay" onclick="chat.closeFilePreview()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Datei-Vorschau</h2>
+                <button class="modal-close" onclick="chat.closeFilePreview()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="file-preview" id="filePreviewContent">
+                    <!-- File preview content -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="chat.closeFilePreview()">Schließen</button>
+                <button class="btn-primary" onclick="chat.confirmFileUpload()">Anhängen</button>
+            </div>
+        </div>
     </div>
-
-    <!-- Toast Container -->
+    
+    <!-- Chat Export Modal -->
+    <div class="modal" id="exportModal">
+        <div class="modal-overlay" onclick="chat.closeExportModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Chat exportieren</h2>
+                <button class="modal-close" onclick="chat.closeExportModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="export-options">
+                    <div class="option-group">
+                        <label>Format:</label>
+                        <select id="exportFormat">
+                            <option value="json">JSON</option>
+                            <option value="txt">Text</option>
+                            <option value="pdf">PDF</option>
+                            <option value="html">HTML</option>
+                        </select>
+                    </div>
+                    
+                    <div class="option-group">
+                        <label>
+                            <input type="checkbox" id="includeTimestamps" checked>
+                            Zeitstempel einschließen
+                        </label>
+                    </div>
+                    
+                    <div class="option-group">
+                        <label>
+                            <input type="checkbox" id="includeProfile" checked>
+                            Profil-Informationen einschließen
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="chat.closeExportModal()">Abbrechen</button>
+                <button class="btn-primary" onclick="chat.exportChat()">Exportieren</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ========================================
+         TOAST NOTIFICATIONS
+         ======================================== -->
     <div class="toast-container" id="toastContainer"></div>
-
-    <script src="js/chat.js"></script>
+    
+    <!-- ========================================
+         DRAG & DROP OVERLAY
+         ======================================== -->
+    <div class="drag-drop-overlay" id="dragDropOverlay">
+        <div class="drag-drop-content">
+            <div class="drag-drop-icon">📎</div>
+            <div class="drag-drop-text">Dateien hier ablegen</div>
+            <div class="drag-drop-subtext">Unterstützte Formate: Bilder, PDF, Text, Word</div>
+        </div>
+    </div>
+    
+    <!-- ========================================
+         SCRIPTS
+         ======================================== -->
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js');
+            });
+        }
+        
+        // Global error handling
+        window.addEventListener('error', (event) => {
+            console.error('Critical error:', event.error);
+        });
+        
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+            event.preventDefault();
+        });
+    </script>
+    
+    <!-- Main Chat Script -->
+    <script src="/js/chat.js" defer></script>
+    
+    <!-- ========================================
+         CRITICAL CSS FOR CHAT
+         ======================================== -->
+    <style>
+        /* Critical chat styles for immediate rendering */
+        .chat-container {
+            display: flex;
+            height: 100vh;
+            background: linear-gradient(135deg, #0a0a0a 0%, #151515 50%, #1f1f1f 100%);
+            color: white;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .chat-sidebar {
+            width: 320px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        
+        .chat-header {
+            height: 80px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+        }
+        
+        .chat-messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem;
+        }
+        
+        .chat-input-container {
+            padding: 1rem 2rem 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+        }
+        
+        .message-input-wrapper {
+            display: flex;
+            align-items: flex-end;
+            gap: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 1rem;
+        }
+        
+        .message-input {
+            flex: 1;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1rem;
+            resize: none;
+            outline: none;
+            min-height: 24px;
+            max-height: 120px;
+        }
+        
+        .message-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .send-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .send-button:not(:disabled):hover {
+            transform: scale(1.1);
+        }
+        
+        @media (max-width: 768px) {
+            .chat-sidebar {
+                position: fixed;
+                left: -100%;
+                z-index: 1000;
+                height: 100vh;
+                transition: left 0.3s ease;
+            }
+            
+            .chat-sidebar.open {
+                left: 0;
+            }
+            
+            .chat-main {
+                margin-left: 0;
+            }
+            
+            .chat-header {
+                padding: 0 1rem;
+            }
+            
+            .chat-messages-container {
+                padding: 1rem;
+            }
+            
+            .chat-input-container {
+                padding: 1rem;
+            }
+        }
+    </style>
 </body>
 </html>

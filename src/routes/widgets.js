@@ -1,408 +1,729 @@
 /**
- * 🧩 WIDGET ROUTES
- * API Endpoints für Widget-Management
+ * 🧩 ALL-KI WIDGET ROUTES - MODERN VERSION 2.0
+ * Dynamic widget system with real-time data and customization
  * 
- * SEPARATION OF CONCERNS:
- * - Widget Configuration
- * - Widget Data Management
- * - Layout Management
- * - Widget Templates
+ * EINFÜGEN IN: src/routes/widgets.js
  */
 
 const express = require('express');
+const { body, validationResult, param } = require('express-validator');
+const { requireAuth, requireFeature } = require('../middleware/auth');
+const { asyncHandler } = require('../middleware/errorMiddleware');
+const { log } = require('../middleware/logger');
+
 const router = express.Router();
 
-// Simple middleware for user authentication
-const getUserFromToken = (req, res, next) => {
-    // TODO: Implement proper JWT token validation
-    // For now, mock user for development
-    req.user = {
-        _id: 'mock-user-id',
-        email: 'ravellukas@gmx.de',
-        firstName: 'Lukas',
-        lastName: 'Geck'
-    };
+// All routes require authentication
+router.use(requireAuth);
+
+// ========================================
+// VALIDATION SCHEMAS
+// ========================================
+
+const createWidgetValidation = [
+    body('type')
+        .isIn(['weather', 'news', 'calendar', 'tasks', 'quotes', 'crypto', 'stocks', 'traffic', 'sports', 'custom'])
+        .withMessage('Ungültiger Widget-Typ'),
+    
+    body('title')
+        .trim()
+        .isLength({ min: 1, max: 100 })
+        .withMessage('Titel muss zwischen 1 und 100 Zeichen lang sein'),
+    
+    body('position.x')
+        .isInt({ min: 0 })
+        .withMessage('X-Position muss eine positive Zahl sein'),
+    
+    body('position.y')
+        .isInt({ min: 0 })
+        .withMessage('Y-Position muss eine positive Zahl sein'),
+    
+    body('size.width')
+        .isInt({ min: 1, max: 12 })
+        .withMessage('Breite muss zwischen 1 und 12 sein'),
+    
+    body('size.height')
+        .isInt({ min: 1, max: 12 })
+        .withMessage('Höhe muss zwischen 1 und 12 sein'),
+    
+    body('settings')
+        .optional()
+        .isObject()
+        .withMessage('Einstellungen müssen ein Objekt sein')
+];
+
+// ========================================
+// WIDGET DATA PROVIDERS
+// ========================================
+
+class WeatherProvider {
+    static async getData(settings = {}) {
+        const { city = 'Berlin', units = 'metric' } = settings;
+        
+        // Mock weather data (replace with real API)
+        return {
+            location: city,
+            temperature: Math.round(Math.random() * 30 + 5),
+            condition: ['sunny', 'cloudy', 'rainy', 'stormy'][Math.floor(Math.random() * 4)],
+            humidity: Math.round(Math.random() * 100),
+            windSpeed: Math.round(Math.random() * 20),
+            forecast: Array.from({ length: 5 }, (_, i) => ({
+                day: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toLocaleDateString('de-DE', { weekday: 'short' }),
+                high: Math.round(Math.random() * 30 + 5),
+                low: Math.round(Math.random() * 20 + 0),
+                condition: ['sunny', 'cloudy', 'rainy'][Math.floor(Math.random() * 3)]
+            })),
+            lastUpdated: new Date().toISOString()
+        };
+    }
+}
+
+class NewsProvider {
+    static async getData(settings = {}) {
+        const { category = 'general', country = 'de', limit = 5 } = settings;
+        
+        // Mock news data (replace with real API)
+        const headlines = [
+            'KI-Revolution: Neue Durchbrüche in der Technologie',
+            'Nachhaltigkeit: Grüne Energie auf dem Vormarsch',
+            'Wirtschaft: Märkte zeigen positive Entwicklung',
+            'Wissenschaft: Bahnbrechende Entdeckung angekündigt',
+            'Innovation: Startups präsentieren neue Lösungen'
+        ];
+        
+        return {
+            articles: Array.from({ length: limit }, (_, i) => ({
+                id: i + 1,
+                title: headlines[i % headlines.length],
+                summary: 'Kurze Zusammenfassung des Artikels mit den wichtigsten Informationen...',
+                url: `https://example.com/article-${i + 1}`,
+                publishedAt: new Date(Date.now() - i * 60 * 60 * 1000).toISOString(),
+                source: ['TechNews', 'Wirtschaftswoche', 'Spiegel', 'Zeit'][Math.floor(Math.random() * 4)]
+            })),
+            category,
+            lastUpdated: new Date().toISOString()
+        };
+    }
+}
+
+class CryptoProvider {
+    static async getData(settings = {}) {
+        const { symbols = ['BTC', 'ETH', 'ADA'], currency = 'EUR' } = settings;
+        
+        // Mock crypto data (replace with real API)
+        return {
+            currencies: symbols.map(symbol => ({
+                symbol,
+                name: { BTC: 'Bitcoin', ETH: 'Ethereum', ADA: 'Cardano' }[symbol] || symbol,
+                price: Math.round(Math.random() * 50000 + 1000),
+                change24h: (Math.random() - 0.5) * 20,
+                changePercent24h: (Math.random() - 0.5) * 10,
+                volume24h: Math.round(Math.random() * 1000000000),
+                marketCap: Math.round(Math.random() * 1000000000000)
+            })),
+            currency,
+            lastUpdated: new Date().toISOString()
+        };
+    }
+}
+
+class QuotesProvider {
+    static async getData(settings = {}) {
+        const { category = 'motivation', language = 'de' } = settings;
+        
+        const quotes = {
+            de: [
+                { text: 'Der Weg ist das Ziel.', author: 'Konfuzius' },
+                { text: 'Innovation unterscheidet zwischen einem Führer und einem Nachfolger.', author: 'Steve Jobs' },
+                { text: 'Das Leben ist wie Fahrradfahren. Um die Balance zu halten, musst du in Bewegung bleiben.', author: 'Albert Einstein' },
+                { text: 'Die Zukunft gehört denen, die an die Schönheit ihrer Träume glauben.', author: 'Eleanor Roosevelt' },
+                { text: 'Erfolg ist nicht final, Misserfolg ist nicht fatal: Es ist der Mut weiterzumachen, der zählt.', author: 'Winston Churchill' }
+            ],
+            en: [
+                { text: 'The journey is the destination.', author: 'Confucius' },
+                { text: 'Innovation distinguishes between a leader and a follower.', author: 'Steve Jobs' },
+                { text: 'Life is like riding a bicycle. To keep your balance, you must keep moving.', author: 'Albert Einstein' },
+                { text: 'The future belongs to those who believe in the beauty of their dreams.', author: 'Eleanor Roosevelt' },
+                { text: 'Success is not final, failure is not fatal: it is the courage to continue that counts.', author: 'Winston Churchill' }
+            ]
+        };
+        
+        const availableQuotes = quotes[language] || quotes.de;
+        const randomQuote = availableQuotes[Math.floor(Math.random() * availableQuotes.length)];
+        
+        return {
+            quote: randomQuote,
+            category,
+            language,
+            lastUpdated: new Date().toISOString()
+        };
+    }
+}
+
+class TasksProvider {
+    static async getData(settings = {}, userId) {
+        // Mock tasks data (integrate with real task management)
+        return {
+            tasks: [
+                {
+                    id: 1,
+                    title: 'Dashboard optimieren',
+                    completed: false,
+                    priority: 'high',
+                    dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+                },
+                {
+                    id: 2,
+                    title: 'Meeting vorbereiten',
+                    completed: false,
+                    priority: 'medium',
+                    dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
+                },
+                {
+                    id: 3,
+                    title: 'E-Mails beantworten',
+                    completed: true,
+                    priority: 'low',
+                    dueDate: new Date().toISOString()
+                }
+            ],
+            totalTasks: 3,
+            completedTasks: 1,
+            pendingTasks: 2,
+            lastUpdated: new Date().toISOString()
+        };
+    }
+}
+
+// ========================================
+// WIDGET FACTORY
+// ========================================
+
+class WidgetFactory {
+    static async getWidgetData(type, settings, userId) {
+        const providers = {
+            weather: WeatherProvider,
+            news: NewsProvider,
+            crypto: CryptoProvider,
+            quotes: QuotesProvider,
+            tasks: TasksProvider
+        };
+        
+        const provider = providers[type];
+        if (!provider) {
+            throw new Error(`Unknown widget type: ${type}`);
+        }
+        
+        try {
+            return await provider.getData(settings, userId);
+        } catch (error) {
+            log.error(`Widget data provider error for type ${type}`, error);
+            throw new Error('Failed to fetch widget data');
+        }
+    }
+    
+    static getWidgetTemplate(type) {
+        const templates = {
+            weather: {
+                title: 'Wetter',
+                description: 'Aktuelle Wetterbedingungen und Vorhersage',
+                defaultSettings: {
+                    city: 'Berlin',
+                    units: 'metric',
+                    showForecast: true
+                },
+                size: { width: 4, height: 3 },
+                refreshInterval: 300000 // 5 minutes
+            },
+            news: {
+                title: 'Nachrichten',
+                description: 'Aktuelle Nachrichten und Headlines',
+                defaultSettings: {
+                    category: 'general',
+                    country: 'de',
+                    limit: 5
+                },
+                size: { width: 6, height: 4 },
+                refreshInterval: 600000 // 10 minutes
+            },
+            crypto: {
+                title: 'Kryptowährungen',
+                description: 'Aktuelle Kurse und Marktdaten',
+                defaultSettings: {
+                    symbols: ['BTC', 'ETH', 'ADA'],
+                    currency: 'EUR'
+                },
+                size: { width: 4, height: 3 },
+                refreshInterval: 60000 // 1 minute
+            },
+            quotes: {
+                title: 'Zitat des Tages',
+                description: 'Inspirierende Zitate und Weisheiten',
+                defaultSettings: {
+                    category: 'motivation',
+                    language: 'de'
+                },
+                size: { width: 4, height: 2 },
+                refreshInterval: 3600000 // 1 hour
+            },
+            tasks: {
+                title: 'Aufgaben',
+                description: 'Ihre aktuellen Aufgaben und To-dos',
+                defaultSettings: {
+                    showCompleted: false,
+                    sortBy: 'dueDate'
+                },
+                size: { width: 4, height: 4 },
+                refreshInterval: 300000 // 5 minutes
+            }
+        };
+        
+        return templates[type] || null;
+    }
+}
+
+// ========================================
+// HELPER FUNCTIONS
+// ========================================
+
+const handleValidationErrors = (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({
+            success: false,
+            error: 'Validierungsfehler',
+            details: errors.array()
+        });
+    }
     next();
 };
 
-console.log('✅ Widget routes: Setting up routes...');
-
 // ========================================
-// WIDGET CONFIGURATION ROUTES
+// ROUTES
 // ========================================
 
-// Get all user widgets
-router.get('/', getUserFromToken, async (req, res) => {
+// Get All User Widgets
+router.get('/', asyncHandler(async (req, res) => {
     try {
-        console.log('🧩 Get user widgets request');
-        
-        // Mock widgets for development
+        // Mock user widgets (replace with database)
         const widgets = [
             {
-                id: 'widget-1',
+                id: '1',
                 type: 'weather',
-                title: 'Wetter',
-                position: { x: 0, y: 0, width: 2, height: 2 },
-                config: {
-                    location: 'Detmold',
-                    units: 'metric',
-                    autoRefresh: true,
-                    refreshInterval: 600000 // 10 minutes
-                },
-                data: {
-                    temperature: 22,
-                    condition: 'Sonnig',
-                    humidity: 65,
-                    windSpeed: 12
-                },
+                title: 'Wetter Berlin',
+                position: { x: 0, y: 0 },
+                size: { width: 4, height: 3 },
+                settings: { city: 'Berlin', units: 'metric' },
                 isActive: true,
                 createdAt: new Date(),
                 updatedAt: new Date()
             },
             {
-                id: 'widget-2',
-                type: 'calendar',
-                title: 'Termine',
-                position: { x: 2, y: 0, width: 3, height: 2 },
-                config: {
-                    showWeekend: true,
-                    defaultView: 'week',
-                    autoRefresh: true,
-                    refreshInterval: 300000 // 5 minutes
-                },
-                data: {
-                    upcomingEvents: [
-                        {
-                            title: 'Team Meeting',
-                            start: new Date(Date.now() + 2 * 60 * 60 * 1000), // in 2 hours
-                            duration: 60
-                        }
-                    ]
-                },
+                id: '2',
+                type: 'news',
+                title: 'Aktuelle Nachrichten',
+                position: { x: 4, y: 0 },
+                size: { width: 6, height: 4 },
+                settings: { category: 'technology', limit: 5 },
                 isActive: true,
                 createdAt: new Date(),
                 updatedAt: new Date()
             },
             {
-                id: 'widget-3',
-                type: 'quick-chat',
-                title: 'Quick Chat',
-                position: { x: 0, y: 2, width: 5, height: 3 },
-                config: {
-                    maxMessages: 10,
-                    showTyping: true,
-                    autoSave: true
-                },
-                data: {
-                    recentMessages: []
-                },
+                id: '3',
+                type: 'crypto',
+                title: 'Krypto-Kurse',
+                position: { x: 0, y: 3 },
+                size: { width: 4, height: 3 },
+                settings: { symbols: ['BTC', 'ETH', 'ADA'] },
                 isActive: true,
                 createdAt: new Date(),
                 updatedAt: new Date()
             }
         ];
-
+        
         res.json({
             success: true,
-            widgets: widgets,
+            widgets,
             total: widgets.length
         });
-
-    } catch (error) {
-        console.error('Get Widgets Error:', error);
-        res.status(500).json({ error: 'Fehler beim Laden der Widgets' });
-    }
-});
-
-// Get specific widget
-router.get('/:widgetId', getUserFromToken, async (req, res) => {
-    try {
-        console.log('🧩 Get widget request:', req.params.widgetId);
         
-        // Mock widget data
-        const widget = {
-            id: req.params.widgetId,
-            type: 'weather',
-            title: 'Wetter Widget',
-            position: { x: 0, y: 0, width: 2, height: 2 },
-            config: {
-                location: 'Detmold',
-                units: 'metric',
-                autoRefresh: true
-            },
-            data: {
-                temperature: 22,
-                condition: 'Sonnig'
-            },
-            isActive: true
-        };
+    } catch (error) {
+        log.error('Get widgets error', error, { userId: req.user.id });
+        throw error;
+    }
+}));
 
+// Get Widget Data
+router.get('/:id/data', param('id').notEmpty(), asyncHandler(async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Mock widget lookup (replace with database)
+        const widget = {
+            id,
+            type: 'weather',
+            settings: { city: 'Berlin', units: 'metric' }
+        };
+        
+        if (!widget) {
+            return res.status(404).json({
+                success: false,
+                error: 'Widget nicht gefunden'
+            });
+        }
+        
+        const data = await WidgetFactory.getWidgetData(widget.type, widget.settings, req.user.id);
+        
         res.json({
             success: true,
-            widget: widget
+            widget: {
+                id: widget.id,
+                type: widget.type,
+                data,
+                lastUpdated: new Date().toISOString()
+            }
         });
-
+        
     } catch (error) {
-        console.error('Get Widget Error:', error);
-        res.status(500).json({ error: 'Fehler beim Laden des Widgets' });
+        log.error('Get widget data error', error, { 
+            userId: req.user.id, 
+            widgetId: req.params.id 
+        });
+        
+        res.status(500).json({
+            success: false,
+            error: 'Fehler beim Laden der Widget-Daten'
+        });
     }
-});
+}));
 
-// Create new widget
-router.post('/', getUserFromToken, async (req, res) => {
+// Create New Widget
+router.post('/', requireFeature('widgets'), createWidgetValidation, handleValidationErrors, asyncHandler(async (req, res) => {
     try {
-        console.log('✨ Create widget request:', req.body);
+        const { type, title, position, size, settings } = req.body;
         
-        const { type, title, position, config } = req.body;
-        
-        if (!type || !title) {
-            return res.status(400).json({ error: 'Type und Title sind erforderlich' });
+        // Get widget template
+        const template = WidgetFactory.getWidgetTemplate(type);
+        if (!template) {
+            return res.status(400).json({
+                success: false,
+                error: 'Unbekannter Widget-Typ'
+            });
         }
-
-        // Mock widget creation
-        const newWidget = {
-            id: `widget-${Date.now()}`,
-            type: type,
-            title: title,
-            position: position || { x: 0, y: 0, width: 2, height: 2 },
-            config: config || {},
-            data: {},
+        
+        // Create widget (mock - replace with database)
+        const widget = {
+            id: Date.now().toString(),
+            type,
+            title: title || template.title,
+            position,
+            size: size || template.size,
+            settings: { ...template.defaultSettings, ...settings },
             isActive: true,
+            refreshInterval: template.refreshInterval,
             createdAt: new Date(),
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            userId: req.user.id
         };
-
+        
+        log.info('Widget created', {
+            userId: req.user.id,
+            widgetId: widget.id,
+            widgetType: type
+        });
+        
         res.status(201).json({
             success: true,
-            widget: newWidget,
-            message: 'Widget erfolgreich erstellt'
+            message: 'Widget erfolgreich erstellt',
+            widget
         });
-
+        
     } catch (error) {
-        console.error('Create Widget Error:', error);
-        res.status(500).json({ error: 'Fehler beim Erstellen des Widgets' });
+        log.error('Create widget error', error, { userId: req.user.id });
+        throw error;
     }
-});
+}));
 
-// Update widget
-router.put('/:widgetId', getUserFromToken, async (req, res) => {
+// Update Widget
+router.put('/:id', param('id').notEmpty(), asyncHandler(async (req, res) => {
     try {
-        console.log('💾 Update widget request:', req.params.widgetId, req.body);
+        const { id } = req.params;
+        const { title, position, size, settings, isActive } = req.body;
         
-        const { title, position, config, data } = req.body;
-        
-        // Mock widget update
-        const updatedWidget = {
-            id: req.params.widgetId,
-            title: title || 'Updated Widget',
-            position: position || { x: 0, y: 0, width: 2, height: 2 },
-            config: config || {},
-            data: data || {},
+        // Mock widget update (replace with database)
+        const widget = {
+            id,
+            type: 'weather',
+            title: title || 'Wetter Berlin',
+            position: position || { x: 0, y: 0 },
+            size: size || { width: 4, height: 3 },
+            settings: settings || { city: 'Berlin' },
+            isActive: isActive !== undefined ? isActive : true,
             updatedAt: new Date()
         };
-
+        
+        log.info('Widget updated', {
+            userId: req.user.id,
+            widgetId: id
+        });
+        
         res.json({
             success: true,
-            widget: updatedWidget,
-            message: 'Widget erfolgreich aktualisiert'
+            message: 'Widget erfolgreich aktualisiert',
+            widget
         });
-
-    } catch (error) {
-        console.error('Update Widget Error:', error);
-        res.status(500).json({ error: 'Fehler beim Aktualisieren des Widgets' });
-    }
-});
-
-// Delete widget
-router.delete('/:widgetId', getUserFromToken, async (req, res) => {
-    try {
-        console.log('🗑️ Delete widget request:', req.params.widgetId);
         
-        // Mock widget deletion
+    } catch (error) {
+        log.error('Update widget error', error, { 
+            userId: req.user.id, 
+            widgetId: req.params.id 
+        });
+        throw error;
+    }
+}));
+
+// Delete Widget
+router.delete('/:id', param('id').notEmpty(), asyncHandler(async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Mock widget deletion (replace with database)
+        log.info('Widget deleted', {
+            userId: req.user.id,
+            widgetId: id
+        });
+        
         res.json({
             success: true,
             message: 'Widget erfolgreich gelöscht'
         });
-
-    } catch (error) {
-        console.error('Delete Widget Error:', error);
-        res.status(500).json({ error: 'Fehler beim Löschen des Widgets' });
-    }
-});
-
-// ========================================
-// WIDGET LAYOUT ROUTES
-// ========================================
-
-// Get dashboard layout
-router.get('/layout/dashboard', getUserFromToken, async (req, res) => {
-    try {
-        console.log('📐 Get dashboard layout request');
         
-        // Mock layout configuration
-        const layout = {
-            gridSize: { columns: 12, rows: 10 },
-            widgets: [
-                { id: 'widget-1', x: 0, y: 0, width: 3, height: 2 },
-                { id: 'widget-2', x: 3, y: 0, width: 4, height: 2 },
-                { id: 'widget-3', x: 0, y: 2, width: 7, height: 3 }
-            ],
-            theme: 'dark',
-            compact: false,
-            autoArrange: false
-        };
-
-        res.json({
-            success: true,
-            layout: layout
+    } catch (error) {
+        log.error('Delete widget error', error, { 
+            userId: req.user.id, 
+            widgetId: req.params.id 
         });
-
-    } catch (error) {
-        console.error('Get Layout Error:', error);
-        res.status(500).json({ error: 'Fehler beim Laden des Layouts' });
+        throw error;
     }
-});
+}));
 
-// Update dashboard layout
-router.put('/layout/dashboard', getUserFromToken, async (req, res) => {
-    try {
-        console.log('💾 Update dashboard layout request:', req.body);
-        
-        const { widgets, gridSize, theme, compact } = req.body;
-        
-        // Mock layout update
-        const updatedLayout = {
-            gridSize: gridSize || { columns: 12, rows: 10 },
-            widgets: widgets || [],
-            theme: theme || 'dark',
-            compact: compact || false,
-            updatedAt: new Date()
-        };
-
-        res.json({
-            success: true,
-            layout: updatedLayout,
-            message: 'Layout erfolgreich gespeichert'
-        });
-
-    } catch (error) {
-        console.error('Update Layout Error:', error);
-        res.status(500).json({ error: 'Fehler beim Speichern des Layouts' });
-    }
-});
-
-// ========================================
-// WIDGET TEMPLATES ROUTES
-// ========================================
-
-// Get available widget templates
-router.get('/templates', (req, res) => {
-    try {
-        console.log('📝 Get widget templates request');
-        
-        const templates = [
-            {
-                id: 'weather-template',
-                name: 'Wetter Widget',
-                type: 'weather',
-                description: 'Zeigt aktuelle Wetterdaten an',
-                icon: '🌤️',
-                defaultSize: { width: 2, height: 2 },
-                configOptions: [
-                    { name: 'location', type: 'string', default: 'Detmold' },
-                    { name: 'units', type: 'select', options: ['metric', 'imperial'], default: 'metric' }
-                ]
-            },
-            {
-                id: 'calendar-template',
-                name: 'Kalender Widget',
-                type: 'calendar',
-                description: 'Zeigt anstehende Termine an',
-                icon: '📅',
-                defaultSize: { width: 3, height: 2 },
-                configOptions: [
-                    { name: 'showWeekend', type: 'boolean', default: true },
-                    { name: 'defaultView', type: 'select', options: ['day', 'week', 'month'], default: 'week' }
-                ]
-            },
-            {
-                id: 'chat-template',
-                name: 'Quick Chat Widget',
-                type: 'quick-chat',
-                description: 'Schneller Chat mit der KI',
-                icon: '💬',
-                defaultSize: { width: 4, height: 3 },
-                configOptions: [
-                    { name: 'maxMessages', type: 'number', default: 10 },
-                    { name: 'showTyping', type: 'boolean', default: true }
-                ]
+// Get Available Widget Types
+router.get('/types', (req, res) => {
+    const types = [
+        {
+            id: 'weather',
+            name: 'Wetter',
+            description: 'Aktuelle Wetterbedingungen und Vorhersage',
+            icon: '🌤️',
+            category: 'information',
+            template: WidgetFactory.getWidgetTemplate('weather')
+        },
+        {
+            id: 'news',
+            name: 'Nachrichten',
+            description: 'Aktuelle Nachrichten und Headlines',
+            icon: '📰',
+            category: 'information',
+            template: WidgetFactory.getWidgetTemplate('news')
+        },
+        {
+            id: 'crypto',
+            name: 'Kryptowährungen',
+            description: 'Aktuelle Kurse und Marktdaten',
+            icon: '₿',
+            category: 'finance',
+            template: WidgetFactory.getWidgetTemplate('crypto')
+        },
+        {
+            id: 'quotes',
+            name: 'Zitate',
+            description: 'Inspirierende Zitate und Weisheiten',
+            icon: '💭',
+            category: 'lifestyle',
+            template: WidgetFactory.getWidgetTemplate('quotes')
+        },
+        {
+            id: 'tasks',
+            name: 'Aufgaben',
+            description: 'Ihre aktuellen Aufgaben und To-dos',
+            icon: '✅',
+            category: 'productivity',
+            template: WidgetFactory.getWidgetTemplate('tasks')
+        },
+        {
+            id: 'calendar',
+            name: 'Kalender',
+            description: 'Anstehende Termine und Ereignisse',
+            icon: '📅',
+            category: 'productivity',
+            template: {
+                title: 'Kalender',
+                size: { width: 6, height: 4 },
+                refreshInterval: 300000
             }
-        ];
-
-        res.json({
-            success: true,
-            templates: templates
-        });
-
-    } catch (error) {
-        console.error('Get Templates Error:', error);
-        res.status(500).json({ error: 'Fehler beim Laden der Templates' });
-    }
-});
-
-// ========================================
-// WIDGET DATA ROUTES
-// ========================================
-
-// Refresh widget data
-router.post('/:widgetId/refresh', getUserFromToken, async (req, res) => {
-    try {
-        console.log('🔄 Refresh widget data request:', req.params.widgetId);
-        
-        // Mock data refresh
-        const refreshedData = {
-            timestamp: new Date(),
-            data: {
-                temperature: Math.floor(Math.random() * 30) + 10,
-                condition: ['Sonnig', 'Bewölkt', 'Regen'][Math.floor(Math.random() * 3)]
+        },
+        {
+            id: 'stocks',
+            name: 'Aktien',
+            description: 'Aktienkurse und Marktdaten',
+            icon: '📈',
+            category: 'finance',
+            template: {
+                title: 'Aktien',
+                size: { width: 4, height: 3 },
+                refreshInterval: 60000
             }
-        };
-
-        res.json({
-            success: true,
-            data: refreshedData,
-            message: 'Widget-Daten aktualisiert'
-        });
-
-    } catch (error) {
-        console.error('Refresh Widget Data Error:', error);
-        res.status(500).json({ error: 'Fehler beim Aktualisieren der Widget-Daten' });
-    }
-});
-
-// ========================================
-// DEVELOPMENT/DEBUG ROUTES
-// ========================================
-
-// Test route
-router.get('/test/ping', (req, res) => {
-    res.json({ 
-        message: 'Widget routes are working!',
-        timestamp: new Date(),
-        routes: [
-            'GET /api/widgets',
-            'GET /api/widgets/:id',
-            'POST /api/widgets',
-            'PUT /api/widgets/:id',
-            'DELETE /api/widgets/:id',
-            'GET /api/widgets/layout/dashboard',
-            'PUT /api/widgets/layout/dashboard',
-            'GET /api/widgets/templates',
-            'POST /api/widgets/:id/refresh'
+        },
+        {
+            id: 'traffic',
+            name: 'Verkehr',
+            description: 'Aktuelle Verkehrslage und Routen',
+            icon: '🚗',
+            category: 'information',
+            template: {
+                title: 'Verkehr',
+                size: { width: 4, height: 3 },
+                refreshInterval: 300000
+            }
+        }
+    ];
+    
+    res.json({
+        success: true,
+        types,
+        categories: [
+            { id: 'information', name: 'Information', icon: 'ℹ️' },
+            { id: 'productivity', name: 'Produktivität', icon: '⚡' },
+            { id: 'finance', name: 'Finanzen', icon: '💰' },
+            { id: 'lifestyle', name: 'Lifestyle', icon: '🌟' }
         ]
     });
 });
 
-console.log('✅ Widget routes: All routes configured');
+// Update Widget Layout (Bulk Update)
+router.put('/layout', body('widgets').isArray(), asyncHandler(async (req, res) => {
+    try {
+        const { widgets } = req.body;
+        
+        // Mock layout update (replace with database transaction)
+        const updatedWidgets = widgets.map(widget => ({
+            ...widget,
+            updatedAt: new Date()
+        }));
+        
+        log.info('Widget layout updated', {
+            userId: req.user.id,
+            widgetCount: widgets.length
+        });
+        
+        res.json({
+            success: true,
+            message: 'Layout erfolgreich gespeichert',
+            widgets: updatedWidgets
+        });
+        
+    } catch (error) {
+        log.error('Update widget layout error', error, { userId: req.user.id });
+        throw error;
+    }
+}));
+
+// Refresh Widget Data
+router.post('/:id/refresh', param('id').notEmpty(), asyncHandler(async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Mock widget lookup and refresh
+        const widget = {
+            id,
+            type: 'weather',
+            settings: { city: 'Berlin' }
+        };
+        
+        const data = await WidgetFactory.getWidgetData(widget.type, widget.settings, req.user.id);
+        
+        res.json({
+            success: true,
+            message: 'Widget-Daten aktualisiert',
+            data,
+            lastUpdated: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        log.error('Refresh widget error', error, { 
+            userId: req.user.id, 
+            widgetId: req.params.id 
+        });
+        throw error;
+    }
+}));
+
+// Export Widget Configuration
+router.get('/export', asyncHandler(async (req, res) => {
+    try {
+        // Mock widget export (replace with database)
+        const widgetConfig = {
+            version: '1.0',
+            exportedAt: new Date().toISOString(),
+            widgets: [
+                {
+                    type: 'weather',
+                    title: 'Wetter',
+                    position: { x: 0, y: 0 },
+                    size: { width: 4, height: 3 },
+                    settings: { city: 'Berlin' }
+                }
+            ]
+        };
+        
+        res.json({
+            success: true,
+            config: widgetConfig
+        });
+        
+    } catch (error) {
+        log.error('Export widgets error', error, { userId: req.user.id });
+        throw error;
+    }
+}));
+
+// Import Widget Configuration
+router.post('/import', body('config').isObject(), asyncHandler(async (req, res) => {
+    try {
+        const { config } = req.body;
+        
+        if (!config.widgets || !Array.isArray(config.widgets)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Ungültige Widget-Konfiguration'
+            });
+        }
+        
+        // Mock widget import (replace with database)
+        const importedWidgets = config.widgets.map((widget, index) => ({
+            ...widget,
+            id: (Date.now() + index).toString(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            userId: req.user.id
+        }));
+        
+        log.info('Widgets imported', {
+            userId: req.user.id,
+            widgetCount: importedWidgets.length
+        });
+        
+        res.json({
+            success: true,
+            message: `${importedWidgets.length} Widgets erfolgreich importiert`,
+            widgets: importedWidgets
+        });
+        
+    } catch (error) {
+        log.error('Import widgets error', error, { userId: req.user.id });
+        throw error;
+    }
+}));
 
 module.exports = router;

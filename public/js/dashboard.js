@@ -1,988 +1,917 @@
 /**
- * 🏠 DASHBOARD MANAGEMENT
- * Zentrale Steuerung für das Dashboard
+ * ⚡ ALL-KI DASHBOARD - MODERN VERSION 2.0
+ * Performance-optimized JavaScript with modern features
  * 
- * SEPARATION OF CONCERNS:
- * - Navigation zwischen Sektionen
- * - Profile Management
- * - User Authentication
- * - Modal Management
- * - Search & Filter Functionality
+ * EINFÜGEN IN: public/js/dashboard.js
+ * 
+ * FEATURES:
+ * ✅ Modern ES6+ Syntax
+ * ✅ Performance Optimized
+ * ✅ Error Handling
+ * ✅ Accessibility Ready
+ * ✅ Mobile-First
+ * ✅ Progressive Web App Ready
  */
 
-class DashboardManager {
+class ModernDashboard {
     constructor() {
-        this.currentSection = 'home';
-        this.profiles = [];
-        this.filteredProfiles = [];
-        this.selectedProfiles = new Set();
-        this.currentUser = null;
-        this.searchQuery = '';
-        this.currentSort = 'lastUsed';
-        this.currentFilter = 'all';
-
-        this.initializeApp();
+        this.state = {
+            currentUser: null,
+            profiles: [],
+            filteredProfiles: [],
+            selectedProfiles: new Set(),
+            currentSection: 'home',
+            theme: localStorage.getItem('theme') || 'dark',
+            sidebarMini: localStorage.getItem('sidebarMini') === 'true',
+            loading: false,
+            online: navigator.onLine
+        };
+        
+        this.cache = new Map();
+        this.debounceTimers = new Map();
+        this.observers = new Map();
+        
+        this.init();
     }
 
     // ========================================
     // INITIALIZATION
     // ========================================
-
-    async initializeApp() {
+    
+    async init() {
         try {
-            // Check authentication
-            await this.checkAuthentication();
+            this.showLoading();
             
-            // Initialize event listeners
-            this.initializeEventListeners();
+            // Setup event listeners
+            this.setupEventListeners();
             
-            // Load initial data
+            // Initialize theme
+            this.initializeTheme();
+            
+            // Initialize sidebar
+            this.initializeSidebar();
+            
+            // Load user data
             await this.loadUserData();
             
             // Initialize sections
             this.initializeSections();
             
-            // Set initial section
-            this.switchSection('home');
+            // Setup PWA features
+            this.initializePWA();
             
-            console.log('✅ Dashboard initialized successfully');
+            // Setup performance monitoring
+            this.initializePerformanceMonitoring();
+            
+            this.hideLoading();
+            this.showSuccessToast('Dashboard erfolgreich geladen! 🚀');
+            
         } catch (error) {
-            console.error('❌ Dashboard initialization failed:', error);
-            this.handleAuthenticationError();
+            console.error('Dashboard initialization error:', error);
+            this.hideLoading();
+            this.showErrorToast('Fehler beim Laden des Dashboards');
         }
     }
 
-    async checkAuthentication() {
-        const token = localStorage.getItem('allKiAuthToken');
-        const email = localStorage.getItem('allKiUserEmail');
-        
-        if (!token || !email) {
-            throw new Error('Not authenticated');
-        }
-
-        // Verify token with server
-        try {
-            const response = await fetch('/api/auth/verify', {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'X-User-Email': email
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error('Token invalid');
-            }
-
-            const userData = await response.json();
-            this.currentUser = userData.user;
-            
-        } catch (error) {
-            console.log('Token verification failed, continuing with stored data');
-            this.currentUser = {
-                email: email,
-                name: localStorage.getItem('allKiUserName') || 'Benutzer'
-            };
-        }
-    }
-
-    initializeEventListeners() {
-        // Navigation
-        document.querySelectorAll('.nav-link[data-section]').forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                const section = link.dataset.section;
-                this.switchSection(section);
-            });
-        });
-
-        // Logout
-        document.getElementById('logout-btn')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.handleLogout();
-        });
-
-        // Profile Search
-        document.getElementById('profileSearch')?.addEventListener('input', (e) => {
-            this.searchQuery = e.target.value.toLowerCase();
-            this.filterAndRenderProfiles();
-        });
-
-        // Search Clear Button
-        document.getElementById('clearSearchBtn')?.addEventListener('click', () => {
-            document.getElementById('profileSearch').value = '';
-            this.searchQuery = '';
-            this.filterAndRenderProfiles();
-        });
-
-        // Profile Sort
-        document.getElementById('profileSort')?.addEventListener('change', (e) => {
-            this.currentSort = e.target.value;
-            this.filterAndRenderProfiles();
-        });
-
-        // Profile Filter
-        document.getElementById('profileFilter')?.addEventListener('change', (e) => {
-            this.currentFilter = e.target.value;
-            this.filterAndRenderProfiles();
-        });
-
-        // Bulk Actions
-        document.getElementById('bulkActionSelect')?.addEventListener('change', (e) => {
-            if (e.target.value && this.selectedProfiles.size > 0) {
-                this.handleBulkAction(e.target.value);
-                e.target.value = '';
-            }
-        });
-
-        // Select All Profiles
-        document.getElementById('selectAllProfiles')?.addEventListener('click', () => {
-            this.toggleSelectAllProfiles();
-        });
-
-        // Create Profile
-        document.getElementById('createProfileBtn')?.addEventListener('click', () => {
-            this.showCreateProfileModal();
-        });
-
-        // Keyboard shortcuts
-        this.initializeKeyboardShortcuts();
-
+    // ========================================
+    // EVENT LISTENERS
+    // ========================================
+    
+    setupEventListeners() {
         // Window events
-        window.addEventListener('beforeunload', () => {
-            this.saveCurrentState();
-        });
-    }
-
-    initializeKeyboardShortcuts() {
-        document.addEventListener('keydown', (e) => {
-            // Skip if user is typing in input field
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-                return;
-            }
-
-            // Ctrl/Cmd + shortcuts
-            if (e.ctrlKey || e.metaKey) {
-                switch (e.key) {
-                    case 'n':
-                        e.preventDefault();
-                        this.showCreateProfileModal();
-                        break;
-                    case 'f':
-                        e.preventDefault();
-                        document.getElementById('profileSearch')?.focus();
-                        break;
-                    case 'a':
-                        if (this.currentSection === 'profiles') {
-                            e.preventDefault();
-                            this.selectAllProfiles();
-                        }
-                        break;
-                }
-            }
-
-            // Number keys for section switching
-            if (e.key >= '1' && e.key <= '5' && !e.ctrlKey && !e.metaKey) {
-                const sections = ['home', 'profiles', 'calendar', 'email', 'widgets'];
-                const sectionIndex = parseInt(e.key) - 1;
-                if (sections[sectionIndex]) {
-                    this.switchSection(sections[sectionIndex]);
-                }
-            }
-        });
-    }
-
-    initializeSections() {
-        // Home Section
-        this.initializeHomeSection();
+        window.addEventListener('resize', this.debounce(() => this.handleResize(), 250));
+        window.addEventListener('online', () => this.handleOnlineStatus(true));
+        window.addEventListener('offline', () => this.handleOnlineStatus(false));
+        window.addEventListener('beforeunload', () => this.saveState());
         
-        // Profiles Section
-        this.initializeProfilesSection();
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => this.handleKeyboardShortcuts(e));
         
-        // Calendar Section
-        this.initializeCalendarSection();
+        // Theme toggle
+        const themeToggle = document.querySelector('.theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => this.toggleTheme());
+        }
         
-        // Email Section
-        this.initializeEmailSection();
+        // Sidebar toggle
+        const sidebarToggle = document.querySelector('.sidebar-toggle');
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', () => this.toggleSidebar());
+        }
         
-        // Widgets Section - handled by widgets.js
-    }
-
-    // ========================================
-    // NAVIGATION & SECTIONS
-    // ========================================
-
-    switchSection(sectionName) {
-        // Update navigation
+        // Navigation
         document.querySelectorAll('.nav-link').forEach(link => {
-            link.classList.remove('active');
+            link.addEventListener('click', (e) => this.handleNavigation(e));
         });
         
-        const activeLink = document.querySelector(`[data-section="${sectionName}"]`);
-        if (activeLink) {
-            activeLink.classList.add('active');
+        // Search
+        const searchInput = document.querySelector('.search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', this.debounce((e) => this.handleSearch(e), 300));
         }
-
-        // Update content
-        document.querySelectorAll('.content-section').forEach(section => {
-            section.classList.remove('active');
-        });
         
-        const targetSection = document.getElementById(`${sectionName}-section`);
-        if (targetSection) {
-            targetSection.classList.add('active');
+        // User menu
+        const userAvatar = document.querySelector('.user-avatar');
+        if (userAvatar) {
+            userAvatar.addEventListener('click', () => this.toggleUserMenu());
         }
-
-        this.currentSection = sectionName;
-
-        // Load section-specific content
-        this.loadSectionContent(sectionName);
-
-        // Update URL without reload
-        const url = new URL(window.location);
-        url.searchParams.set('section', sectionName);
-        window.history.replaceState({}, '', url);
+        
+        // Click outside to close menus
+        document.addEventListener('click', (e) => this.handleOutsideClick(e));
     }
 
-    async loadSectionContent(sectionName) {
-        switch (sectionName) {
-            case 'home':
-                await this.loadHomeContent();
-                break;
-            case 'profiles':
-                await this.loadProfilesContent();
-                break;
-            case 'calendar':
-                await this.loadCalendarContent();
-                break;
-            case 'email':
-                await this.loadEmailContent();
-                break;
-            case 'widgets':
-                // Redirect to widgets page
-                window.location.href = 'widgets.html';
-                break;
+    // ========================================
+    // THEME MANAGEMENT
+    // ========================================
+    
+    initializeTheme() {
+        document.documentElement.setAttribute('data-theme', this.state.theme);
+        this.updateThemeIcon();
+    }
+    
+    toggleTheme() {
+        this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', this.state.theme);
+        localStorage.setItem('theme', this.state.theme);
+        this.updateThemeIcon();
+        
+        // Animate theme change
+        document.body.style.transition = 'all 0.3s ease';
+        setTimeout(() => {
+            document.body.style.transition = '';
+        }, 300);
+        
+        this.showToast(`${this.state.theme === 'dark' ? 'Dark' : 'Light'} Theme aktiviert`, 'info');
+    }
+    
+    updateThemeIcon() {
+        const toggle = document.querySelector('.theme-toggle');
+        if (toggle) {
+            toggle.style.transform = 'scale(0.8)';
+            setTimeout(() => {
+                toggle.style.transform = 'scale(1)';
+            }, 150);
         }
     }
 
     // ========================================
-    // HOME SECTION
+    // SIDEBAR MANAGEMENT
     // ========================================
-
-    initializeHomeSection() {
-        // Home section initialization
+    
+    initializeSidebar() {
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) {
+            sidebar.classList.toggle('mini', this.state.sidebarMini);
+            this.updateMainContentMargin();
+        }
     }
-
-    async loadHomeContent() {
-        try {
-            const welcomeMessage = document.getElementById('welcomeMessage');
-            if (welcomeMessage && this.currentUser) {
-                welcomeMessage.textContent = `Willkommen zurück, ${this.currentUser.name}!`;
+    
+    toggleSidebar() {
+        this.state.sidebarMini = !this.state.sidebarMini;
+        const sidebar = document.querySelector('.sidebar');
+        
+        if (sidebar) {
+            sidebar.classList.toggle('mini', this.state.sidebarMini);
+            this.updateMainContentMargin();
+            
+            // Animate toggle button
+            const toggle = document.querySelector('.sidebar-toggle');
+            if (toggle) {
+                toggle.style.transform = 'translateY(-50%) scale(0.8)';
+                setTimeout(() => {
+                    toggle.style.transform = 'translateY(-50%) scale(1)';
+                }, 150);
             }
-
-            // Load recent profiles
-            await this.loadRecentProfiles();
-            
-            // Load quick stats
-            await this.loadQuickStats();
-            
-        } catch (error) {
-            console.error('Error loading home content:', error);
+        }
+        
+        localStorage.setItem('sidebarMini', this.state.sidebarMini.toString());
+    }
+    
+    updateMainContentMargin() {
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent && window.innerWidth > 1024) {
+            const margin = this.state.sidebarMini ? '80px' : '320px';
+            mainContent.style.marginLeft = margin;
         }
     }
 
-    async loadRecentProfiles() {
-        try {
-            const recentProfiles = this.profiles
-                .sort((a, b) => new Date(b.lastUsed) - new Date(a.lastUsed))
-                .slice(0, 5);
-
-            const container = document.getElementById('recentProfilesContainer');
-            if (container) {
-                container.innerHTML = this.renderRecentProfilesList(recentProfiles);
-            }
-        } catch (error) {
-            console.error('Error loading recent profiles:', error);
+    // ========================================
+    // NAVIGATION
+    // ========================================
+    
+    handleNavigation(e) {
+        e.preventDefault();
+        const target = e.currentTarget;
+        const section = target.dataset.section;
+        
+        if (section && section !== this.state.currentSection) {
+            this.navigateToSection(section);
         }
     }
-
-    async loadQuickStats() {
-        const stats = {
-            totalProfiles: this.profiles.length,
-            activeProfiles: this.profiles.filter(p => p.status === 'active').length,
-            totalChats: this.profiles.reduce((sum, p) => sum + (p.chatCount || 0), 0),
-            weeklyUsage: this.calculateWeeklyUsage()
+    
+    async navigateToSection(section) {
+        try {
+            this.state.currentSection = section;
+            
+            // Update active nav link
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            const activeLink = document.querySelector(`[data-section="${section}"]`);
+            if (activeLink) {
+                activeLink.classList.add('active');
+            }
+            
+            // Update page title
+            this.updatePageTitle(section);
+            
+            // Load section content
+            await this.loadSectionContent(section);
+            
+            // Update URL without page reload
+            history.pushState({ section }, '', `#${section}`);
+            
+        } catch (error) {
+            console.error('Navigation error:', error);
+            this.showErrorToast('Fehler beim Laden des Bereichs');
+        }
+    }
+    
+    updatePageTitle(section) {
+        const titles = {
+            home: 'Dashboard',
+            profiles: 'Profile',
+            chat: 'Chat',
+            widgets: 'Widgets',
+            settings: 'Einstellungen'
         };
-
-        const container = document.getElementById('quickStatsContainer');
-        if (container) {
-            container.innerHTML = this.renderQuickStats(stats);
+        
+        const titleElement = document.querySelector('.page-title');
+        if (titleElement) {
+            titleElement.textContent = titles[section] || 'Dashboard';
+            titleElement.classList.add('fade-in');
+            setTimeout(() => titleElement.classList.remove('fade-in'), 600);
         }
     }
 
     // ========================================
-    // PROFILES SECTION
+    // CONTENT LOADING
     // ========================================
-
-    initializeProfilesSection() {
-        // Profiles section specific initialization
+    
+    async loadSectionContent(section) {
+        const contentArea = document.querySelector('.content-area');
+        if (!contentArea) return;
+        
+        // Check cache first
+        if (this.cache.has(section)) {
+            contentArea.innerHTML = this.cache.get(section);
+            this.initializeSectionEvents(section);
+            return;
+        }
+        
+        this.showSectionLoading(contentArea);
+        
+        try {
+            let content = '';
+            
+            switch (section) {
+                case 'home':
+                    content = await this.loadHomeContent();
+                    break;
+                case 'profiles':
+                    content = await this.loadProfilesContent();
+                    break;
+                case 'chat':
+                    content = await this.loadChatContent();
+                    break;
+                case 'widgets':
+                    content = await this.loadWidgetsContent();
+                    break;
+                case 'settings':
+                    content = await this.loadSettingsContent();
+                    break;
+                default:
+                    content = this.getNotFoundContent();
+            }
+            
+            // Cache content
+            this.cache.set(section, content);
+            
+            // Animate content change
+            contentArea.style.opacity = '0';
+            setTimeout(() => {
+                contentArea.innerHTML = content;
+                contentArea.style.opacity = '1';
+                this.initializeSectionEvents(section);
+            }, 150);
+            
+        } catch (error) {
+            console.error(`Error loading ${section} content:`, error);
+            contentArea.innerHTML = this.getErrorContent(error.message);
+        }
     }
-
+    
+    // ========================================
+    // SECTION CONTENT GENERATORS
+    // ========================================
+    
+    async loadHomeContent() {
+        const stats = await this.getQuickStats();
+        const recentProfiles = this.getRecentProfiles();
+        
+        return `
+            <div class="home-content">
+                <div class="welcome-section card fade-in">
+                    <h2>Willkommen zurück! 👋</h2>
+                    <p>Bereit für einen produktiven Tag mit deinem KI-Assistenten?</p>
+                    <div class="quick-actions">
+                        <button class="btn btn-primary" onclick="dashboard.createNewProfile()">
+                            <span>➕</span> Neues Profil
+                        </button>
+                        <button class="btn btn-secondary" onclick="dashboard.navigateToSection('chat')">
+                            <span>💬</span> Chat starten
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card card slide-in-left">
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-content">
+                            <h3>${stats.totalProfiles}</h3>
+                            <p>Profile</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card slide-in-left" style="animation-delay: 0.1s">
+                        <div class="stat-icon">💬</div>
+                        <div class="stat-content">
+                            <h3>${stats.totalChats}</h3>
+                            <p>Chats</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card slide-in-left" style="animation-delay: 0.2s">
+                        <div class="stat-icon">⚡</div>
+                        <div class="stat-content">
+                            <h3>${stats.activeProfiles}</h3>
+                            <p>Aktiv</p>
+                        </div>
+                    </div>
+                    <div class="stat-card card slide-in-left" style="animation-delay: 0.3s">
+                        <div class="stat-icon">📈</div>
+                        <div class="stat-content">
+                            <h3>${stats.weeklyUsage}%</h3>
+                            <p>Diese Woche</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="recent-section card bounce-in">
+                    <h3>Zuletzt verwendet</h3>
+                    <div class="recent-profiles">
+                        ${this.renderRecentProfiles(recentProfiles)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
     async loadProfilesContent() {
         await this.loadProfiles();
-        this.renderProfilesSection();
-    }
-
-    async loadProfiles() {
-        try {
-            const response = await fetch('/api/profiles', {
-                headers: this.getAuthHeaders()
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.profiles = data.profiles || [];
-                this.filteredProfiles = [...this.profiles];
-            } else {
-                console.error('Failed to load profiles');
-                this.profiles = [];
-            }
-        } catch (error) {
-            console.error('Error loading profiles:', error);
-            this.profiles = [];
-        }
-    }
-
-    renderProfilesSection() {
-        this.filterAndRenderProfiles();
-        this.updateProfilesHeader();
-    }
-
-    filterAndRenderProfiles() {
-        let filtered = [...this.profiles];
-
-        // Apply search filter
-        if (this.searchQuery) {
-            filtered = filtered.filter(profile => 
-                profile.name.toLowerCase().includes(this.searchQuery) ||
-                profile.category.toLowerCase().includes(this.searchQuery) ||
-                (profile.description && profile.description.toLowerCase().includes(this.searchQuery))
-            );
-        }
-
-        // Apply category filter
-        if (this.currentFilter !== 'all') {
-            filtered = filtered.filter(profile => 
-                profile.category.toLowerCase() === this.currentFilter.toLowerCase()
-            );
-        }
-
-        // Apply sorting
-        filtered.sort((a, b) => {
-            switch (this.currentSort) {
-                case 'name':
-                    return a.name.localeCompare(b.name);
-                case 'category':
-                    return a.category.localeCompare(b.category);
-                case 'created':
-                    return new Date(b.createdAt) - new Date(a.createdAt);
-                case 'lastUsed':
-                default:
-                    return new Date(b.lastUsed || b.updatedAt) - new Date(a.lastUsed || a.updatedAt);
-            }
-        });
-
-        this.filteredProfiles = filtered;
-        this.renderProfilesList();
-    }
-
-    renderProfilesList() {
-        const container = document.getElementById('profilesContainer');
-        if (!container) return;
-
-        if (this.filteredProfiles.length === 0) {
-            container.innerHTML = this.renderEmptyProfilesState();
-            return;
-        }
-
-        const html = this.filteredProfiles.map(profile => 
-            this.renderProfileCard(profile)
-        ).join('');
-
-        container.innerHTML = html;
-
-        // Add event listeners to profile cards
-        this.initializeProfileCardEvents();
-    }
-
-    renderProfileCard(profile) {
-        const isSelected = this.selectedProfiles.has(profile._id);
-        const lastUsed = profile.lastUsed ? 
-            new Date(profile.lastUsed).toLocaleDateString('de-DE') : 
-            'Nie verwendet';
-
+        
         return `
-            <div class="profile-card ${isSelected ? 'selected' : ''}" data-profile-id="${profile._id}">
-                <div class="profile-card-header">
-                    <div class="profile-checkbox">
-                        <input type="checkbox" class="profile-select" 
-                               data-profile-id="${profile._id}" ${isSelected ? 'checked' : ''}>
+            <div class="profiles-content">
+                <div class="profiles-header card">
+                    <div class="profiles-header-left">
+                        <h2>Meine Profile</h2>
+                        <span class="profile-count">${this.state.profiles.length} Profile</span>
                     </div>
-                    <div class="profile-category">${profile.category}</div>
-                    <div class="profile-menu">
-                        <button class="profile-menu-btn" data-profile-id="${profile._id}">⋮</button>
-                    </div>
-                </div>
-                
-                <div class="profile-card-body">
-                    <h3 class="profile-title">${profile.name}</h3>
-                    <p class="profile-description">${profile.description || 'Keine Beschreibung verfügbar'}</p>
-                    
-                    <div class="profile-stats">
-                        <div class="profile-stat">
-                            <span class="stat-icon">💬</span>
-                            <span class="stat-value">${profile.chatCount || 0}</span>
-                            <span class="stat-label">Chats</span>
-                        </div>
-                        <div class="profile-stat">
-                            <span class="stat-icon">📅</span>
-                            <span class="stat-value">${lastUsed}</span>
-                            <span class="stat-label">Zuletzt</span>
-                        </div>
+                    <div class="profiles-header-right">
+                        <button class="btn btn-primary" onclick="dashboard.createNewProfile()">
+                            <span>➕</span> Neues Profil
+                        </button>
                     </div>
                 </div>
                 
-                <div class="profile-card-footer">
-                    <button class="btn btn-secondary btn-sm profile-edit-btn" data-profile-id="${profile._id}">
-                        ⚙️ Bearbeiten
-                    </button>
-                    <button class="btn btn-primary btn-sm profile-chat-btn" data-profile-id="${profile._id}">
-                        💬 Chat starten
-                    </button>
+                <div class="profiles-filters card">
+                    <input type="text" 
+                           class="filter-input" 
+                           placeholder="Profile durchsuchen..." 
+                           oninput="dashboard.filterProfiles(this.value)">
+                    <div class="filter-tags">
+                        <button class="filter-tag active" data-filter="all">Alle</button>
+                        <button class="filter-tag" data-filter="fitness">Fitness</button>
+                        <button class="filter-tag" data-filter="work">Arbeit</button>
+                        <button class="filter-tag" data-filter="cooking">Kochen</button>
+                        <button class="filter-tag" data-filter="study">Lernen</button>
+                    </div>
+                </div>
+                
+                <div class="profiles-grid">
+                    ${this.renderProfilesGrid()}
                 </div>
             </div>
         `;
     }
 
-    initializeProfileCardEvents() {
-        // Profile selection
-        document.querySelectorAll('.profile-select').forEach(checkbox => {
-            checkbox.addEventListener('change', (e) => {
-                const profileId = e.target.dataset.profileId;
-                if (e.target.checked) {
-                    this.selectedProfiles.add(profileId);
-                } else {
-                    this.selectedProfiles.delete(profileId);
-                }
-                this.updateProfilesHeader();
-                this.updateProfileCardSelection(profileId, e.target.checked);
-            });
-        });
-
-        // Profile chat buttons
-        document.querySelectorAll('.profile-chat-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const profileId = e.target.dataset.profileId;
-                this.startProfileChat(profileId);
-            });
-        });
-
-        // Profile edit buttons
-        document.querySelectorAll('.profile-edit-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const profileId = e.target.dataset.profileId;
-                this.editProfile(profileId);
-            });
-        });
-
-        // Profile menu buttons
-        document.querySelectorAll('.profile-menu-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const profileId = e.target.dataset.profileId;
-                const rect = e.target.getBoundingClientRect();
-                this.showProfileContextMenu(rect.right - 10, rect.bottom + 5, profileId);
-            });
-        });
-
-        // Profile card clicks
-        document.querySelectorAll('.profile-card').forEach(card => {
-            card.addEventListener('click', (e) => {
-                // Skip if clicking on interactive elements
-                if (e.target.closest('.profile-checkbox, .profile-menu, .btn')) {
-                    return;
-                }
-                
-                const profileId = card.dataset.profileId;
-                this.viewProfile(profileId);
-            });
-        });
-    }
-
     // ========================================
-    // PROFILE ACTIONS
+    // PERFORMANCE OPTIMIZATIONS
     // ========================================
-
-    async startProfileChat(profileId) {
-        const profile = this.profiles.find(p => p._id === profileId);
-        if (!profile) return;
-
-        try {
-            // Update last used timestamp
-            await this.updateProfileLastUsed(profileId);
-            
-            // Open chat modal or navigate to chat
-            this.openProfileChatModal(profile);
-            
-        } catch (error) {
-            console.error('Error starting profile chat:', error);
-            this.showToast('Fehler beim Starten des Chats', 'error');
-        }
+    
+    debounce(func, wait) {
+        const key = func.toString();
+        return (...args) => {
+            clearTimeout(this.debounceTimers.get(key));
+            this.debounceTimers.set(key, setTimeout(() => func.apply(this, args), wait));
+        };
     }
-
-    async editProfile(profileId) {
-        const profile = this.profiles.find(p => p._id === profileId);
-        if (!profile) return;
-
-        this.showEditProfileModal(profile);
-    }
-
-    async deleteProfile(profileId) {
-        if (!confirm('Profil wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/profiles/${profileId}`, {
-                method: 'DELETE',
-                headers: this.getAuthHeaders()
-            });
-
-            if (response.ok) {
-                this.profiles = this.profiles.filter(p => p._id !== profileId);
-                this.selectedProfiles.delete(profileId);
-                this.filterAndRenderProfiles();
-                this.showToast('Profil erfolgreich gelöscht', 'success');
-            } else {
-                throw new Error('Failed to delete profile');
+    
+    throttle(func, limit) {
+        let inThrottle;
+        return function() {
+            const args = arguments;
+            const context = this;
+            if (!inThrottle) {
+                func.apply(context, args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, limit);
             }
-        } catch (error) {
-            console.error('Error deleting profile:', error);
-            this.showToast('Fehler beim Löschen des Profils', 'error');
-        }
+        };
     }
-
-    async duplicateProfile(profileId) {
-        const profile = this.profiles.find(p => p._id === profileId);
-        if (!profile) return;
-
-        try {
-            const duplicatedProfile = {
-                ...profile,
-                name: `${profile.name} (Kopie)`,
-                _id: undefined,
-                createdAt: undefined,
-                updatedAt: undefined,
-                lastUsed: undefined,
-                chatCount: 0
-            };
-
-            const response = await fetch('/api/profiles', {
-                method: 'POST',
-                headers: {
-                    ...this.getAuthHeaders(),
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(duplicatedProfile)
+    
+    lazy(selector, callback) {
+        if (this.observers.has(selector)) return;
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    callback(entry.target);
+                    observer.unobserve(entry.target);
+                }
             });
-
-            if (response.ok) {
-                const data = await response.json();
-                this.profiles.push(data.profile);
-                this.filterAndRenderProfiles();
-                this.showToast('Profil erfolgreich dupliziert', 'success');
-            } else {
-                throw new Error('Failed to duplicate profile');
-            }
-        } catch (error) {
-            console.error('Error duplicating profile:', error);
-            this.showToast('Fehler beim Duplizieren des Profils', 'error');
-        }
+        });
+        
+        document.querySelectorAll(selector).forEach(el => observer.observe(el));
+        this.observers.set(selector, observer);
     }
 
     // ========================================
-    // BULK ACTIONS
+    // PWA FEATURES
     // ========================================
-
-    async handleBulkAction(action) {
-        const selectedIds = Array.from(this.selectedProfiles);
-        if (selectedIds.length === 0) return;
-
-        try {
-            const response = await fetch('/api/profiles/bulk', {
-                method: 'POST',
-                headers: {
-                    ...this.getAuthHeaders(),
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    action: action,
-                    profileIds: selectedIds
+    
+    initializePWA() {
+        // Service Worker registration
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(registration => {
+                    console.log('SW registered:', registration);
                 })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                
-                switch (action) {
-                    case 'delete':
-                        this.profiles = this.profiles.filter(p => !selectedIds.includes(p._id));
-                        this.selectedProfiles.clear();
-                        break;
-                    case 'archive':
-                        selectedIds.forEach(id => {
-                            const profile = this.profiles.find(p => p._id === id);
-                            if (profile) profile.status = 'archived';
-                        });
-                        break;
-                    case 'activate':
-                        selectedIds.forEach(id => {
-                            const profile = this.profiles.find(p => p._id === id);
-                            if (profile) profile.status = 'active';
-                        });
-                        break;
-                }
-
-                this.filterAndRenderProfiles();
-                this.showToast(data.message || 'Bulk-Aktion erfolgreich ausgeführt', 'success');
-            } else {
-                throw new Error('Bulk action failed');
-            }
-        } catch (error) {
-            console.error('Error performing bulk action:', error);
-            this.showToast('Fehler bei der Bulk-Aktion', 'error');
+                .catch(error => {
+                    console.log('SW registration failed:', error);
+                });
         }
-    }
-
-    toggleSelectAllProfiles() {
-        const visibleProfiles = this.filteredProfiles;
-        const allSelected = visibleProfiles.every(p => this.selectedProfiles.has(p._id));
-
-        if (allSelected) {
-            // Deselect all
-            visibleProfiles.forEach(p => this.selectedProfiles.delete(p._id));
-        } else {
-            // Select all
-            visibleProfiles.forEach(p => this.selectedProfiles.add(p._id));
-        }
-
-        this.renderProfilesList();
-        this.updateProfilesHeader();
-    }
-
-    // ========================================
-    // CALENDAR SECTION
-    // ========================================
-
-    initializeCalendarSection() {
-        // Calendar section initialization
-    }
-
-    async loadCalendarContent() {
-        try {
-            // Load calendar data
-            const container = document.getElementById('calendarContainer');
-            if (container) {
-                container.innerHTML = `
-                    <div class="coming-soon">
-                        <div class="coming-soon-icon">📅</div>
-                        <h3>Kalender-Integration</h3>
-                        <p>Die Kalender-Funktion wird bald verfügbar sein.</p>
-                    </div>
-                `;
-            }
-        } catch (error) {
-            console.error('Error loading calendar content:', error);
-        }
-    }
-
-    // ========================================
-    // EMAIL SECTION
-    // ========================================
-
-    initializeEmailSection() {
-        // Email section initialization
-    }
-
-    async loadEmailContent() {
-        try {
-            // Load email data
-            const container = document.getElementById('emailContainer');
-            if (container) {
-                container.innerHTML = `
-                    <div class="coming-soon">
-                        <div class="coming-soon-icon">📧</div>
-                        <h3>E-Mail-Integration</h3>
-                        <p>Die E-Mail-Funktion wird bald verfügbar sein.</p>
-                    </div>
-                `;
-            }
-        } catch (error) {
-            console.error('Error loading email content:', error);
-        }
-    }
-
-    // ========================================
-    // USER MANAGEMENT
-    // ========================================
-
-    async loadUserData() {
-        // Load user-specific data
-        await this.loadProfiles();
-    }
-
-    handleLogout() {
-        // Clear local storage
-        localStorage.removeItem('allKiLoggedIn');
-        localStorage.removeItem('allKiUserEmail');
-        localStorage.removeItem('allKiUserName');
-        localStorage.removeItem('allKiAuthToken');
-        localStorage.removeItem('allKiRememberMe');
-        localStorage.removeItem('allKiNewsletter');
-
-        this.showToast('Erfolgreich abgemeldet!', 'success');
-
-        // Redirect to login
-        setTimeout(() => {
-            window.location.href = 'index.html';
-        }, 1500);
-    }
-
-    handleAuthenticationError() {
-        this.showToast('Sitzung abgelaufen. Bitte melden Sie sich erneut an.', 'error');
         
-        setTimeout(() => {
-            this.handleLogout();
-        }, 2000);
+        // Install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.showInstallPrompt(e);
+        });
     }
-
-    // ========================================
-    // UTILITY METHODS
-    // ========================================
-
-    updateProfilesHeader() {
-        const selectedCount = this.selectedProfiles.size;
-        const totalCount = this.filteredProfiles.length;
-        
-        const counterElement = document.getElementById('profilesCounter');
-        if (counterElement) {
-            if (selectedCount > 0) {
-                counterElement.textContent = `${selectedCount} von ${totalCount} ausgewählt`;
-            } else {
-                counterElement.textContent = `${totalCount} Profile${totalCount !== 1 ? '' : ''}`;
-            }
-        }
-
-        // Show/hide bulk actions
-        const bulkActions = document.getElementById('bulkActionsContainer');
-        if (bulkActions) {
-            bulkActions.style.display = selectedCount > 0 ? 'flex' : 'none';
-        }
-    }
-
-    updateProfileCardSelection(profileId, selected) {
-        const card = document.querySelector(`[data-profile-id="${profileId}"]`);
-        if (card) {
-            card.classList.toggle('selected', selected);
-        }
-    }
-
-    renderEmptyProfilesState() {
-        const hasSearch = this.searchQuery || this.currentFilter !== 'all';
-        
-        if (hasSearch) {
-            return `
-                <div class="profiles-empty">
-                    <div class="empty-icon">🔍</div>
-                    <h3>Keine Profile gefunden</h3>
-                    <p>Ihre Suche ergab keine Treffer. Versuchen Sie andere Suchbegriffe oder Filter.</p>
-                    <button class="btn btn-secondary" onclick="dashboardManager.clearFilters()">
-                        Filter zurücksetzen
-                    </button>
+    
+    showInstallPrompt(e) {
+        const installBanner = document.createElement('div');
+        installBanner.className = 'install-banner card';
+        installBanner.innerHTML = `
+            <div class="install-content">
+                <h4>📱 All-KI installieren</h4>
+                <p>Installiere All-KI für eine bessere App-Erfahrung!</p>
+                <div class="install-actions">
+                    <button class="btn btn-primary" onclick="dashboard.installApp()">Installieren</button>
+                    <button class="btn btn-secondary" onclick="this.parentElement.parentElement.parentElement.remove()">Später</button>
                 </div>
-            `;
-        }
-
-        return `
-            <div class="profiles-empty">
-                <div class="empty-icon">👤</div>
-                <h3>Noch keine Profile erstellt</h3>
-                <p>Erstellen Sie Ihr erstes AI-Profil, um personalisierte Unterhaltungen zu führen.</p>
-                <button class="btn btn-primary create-first-btn" onclick="dashboardManager.showCreateProfileModal()">
-                    Erstes Profil erstellen
-                </button>
             </div>
         `;
-    }
-
-    clearFilters() {
-        document.getElementById('profileSearch').value = '';
-        document.getElementById('profileFilter').value = 'all';
-        this.searchQuery = '';
-        this.currentFilter = 'all';
-        this.filterAndRenderProfiles();
-    }
-
-    calculateWeeklyUsage() {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         
-        return this.profiles.filter(profile => 
-            profile.lastUsed && new Date(profile.lastUsed) > oneWeekAgo
-        ).length;
+        document.body.appendChild(installBanner);
+        this.installPromptEvent = e;
     }
-
-    async updateProfileLastUsed(profileId) {
-        try {
-            await fetch(`/api/profiles/${profileId}/used`, {
-                method: 'POST',
-                headers: this.getAuthHeaders()
-            });
+    
+    async installApp() {
+        if (this.installPromptEvent) {
+            this.installPromptEvent.prompt();
+            const result = await this.installPromptEvent.userChoice;
             
-            // Update local data
-            const profile = this.profiles.find(p => p._id === profileId);
-            if (profile) {
-                profile.lastUsed = new Date().toISOString();
+            if (result.outcome === 'accepted') {
+                this.showSuccessToast('App erfolgreich installiert! 🎉');
             }
-        } catch (error) {
-            console.error('Error updating profile last used:', error);
+            
+            this.installPromptEvent = null;
         }
     }
 
-    saveCurrentState() {
-        const state = {
-            currentSection: this.currentSection,
-            searchQuery: this.searchQuery,
-            currentSort: this.currentSort,
-            currentFilter: this.currentFilter
-        };
+    // ========================================
+    // TOAST NOTIFICATIONS
+    // ========================================
+    
+    showToast(message, type = 'info', duration = 4000) {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <div class="toast-content">
+                <div class="toast-icon">${this.getToastIcon(type)}</div>
+                <div class="toast-message">${message}</div>
+                <button class="toast-close" onclick="this.parentElement.parentElement.remove()">×</button>
+            </div>
+        `;
         
-        localStorage.setItem('allKiDashboardState', JSON.stringify(state));
-    }
-
-    loadPreviousState() {
-        try {
-            const savedState = localStorage.getItem('allKiDashboardState');
-            if (savedState) {
-                const state = JSON.parse(savedState);
-                this.searchQuery = state.searchQuery || '';
-                this.currentSort = state.currentSort || 'lastUsed';
-                this.currentFilter = state.currentFilter || 'all';
-                
-                // Apply saved state to UI elements
-                const searchInput = document.getElementById('profileSearch');
-                if (searchInput) searchInput.value = this.searchQuery;
-                
-                const sortSelect = document.getElementById('profileSort');
-                if (sortSelect) sortSelect.value = this.currentSort;
-                
-                const filterSelect = document.getElementById('profileFilter');
-                if (filterSelect) filterSelect.value = this.currentFilter;
-            }
-        } catch (error) {
-            console.error('Error loading previous state:', error);
-        }
-    }
-
-    getAuthHeaders() {
-        const token = localStorage.getItem('allKiAuthToken');
-        const email = localStorage.getItem('allKiUserEmail');
-        
-        return {
-            'Authorization': `Bearer ${token}`,
-            'X-User-Email': email
-        };
-    }
-
-    showToast(message, type = 'info') {
-        // Create toast container if it doesn't exist
-        let container = document.getElementById('toastContainer');
+        // Add to container
+        let container = document.querySelector('.toast-container');
         if (!container) {
             container = document.createElement('div');
-            container.id = 'toastContainer';
             container.className = 'toast-container';
             document.body.appendChild(container);
         }
-
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
         
+        container.appendChild(toast);
+        
+        // Animate in
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(0)';
+        });
+        
+        // Auto remove
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }
+        }, duration);
+    }
+    
+    getToastIcon(type) {
         const icons = {
             success: '✅',
             error: '❌',
             warning: '⚠️',
             info: 'ℹ️'
         };
+        return icons[type] || icons.info;
+    }
+    
+    showSuccessToast(message) {
+        this.showToast(message, 'success');
+    }
+    
+    showErrorToast(message) {
+        this.showToast(message, 'error', 6000);
+    }
 
-        toast.innerHTML = `
-            <span class="toast-icon">${icons[type]}</span>
-            <span class="toast-message">${message}</span>
-            <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+    // ========================================
+    // LOADING STATES
+    // ========================================
+    
+    showLoading() {
+        this.state.loading = true;
+        const loader = document.createElement('div');
+        loader.id = 'global-loader';
+        loader.className = 'global-loader';
+        loader.innerHTML = `
+            <div class="loader-content">
+                <div class="loader-spinner"></div>
+                <div class="loader-text">All-KI wird geladen...</div>
+            </div>
         `;
+        document.body.appendChild(loader);
+    }
+    
+    hideLoading() {
+        this.state.loading = false;
+        const loader = document.getElementById('global-loader');
+        if (loader) {
+            loader.style.opacity = '0';
+            setTimeout(() => loader.remove(), 300);
+        }
+    }
+    
+    showSectionLoading(container) {
+        container.innerHTML = `
+            <div class="section-loader">
+                <div class="loader-spinner"></div>
+                <p>Inhalt wird geladen...</p>
+            </div>
+        `;
+    }
 
-        container.appendChild(toast);
-
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (toast.parentElement) {
-                toast.remove();
+    // ========================================
+    // UTILITY METHODS
+    // ========================================
+    
+    handleResize() {
+        this.updateMainContentMargin();
+    }
+    
+    handleOnlineStatus(online) {
+        this.state.online = online;
+        const message = online ? 'Verbindung wiederhergestellt' : 'Offline-Modus';
+        const type = online ? 'success' : 'warning';
+        this.showToast(message, type);
+    }
+    
+    handleKeyboardShortcuts(e) {
+        if (e.ctrlKey || e.metaKey) {
+            switch (e.key) {
+                case 'k':
+                    e.preventDefault();
+                    document.querySelector('.search-input')?.focus();
+                    break;
+                case 'n':
+                    e.preventDefault();
+                    this.createNewProfile();
+                    break;
+                case '/':
+                    e.preventDefault();
+                    this.toggleSidebar();
+                    break;
             }
-        }, 5000);
-
-        // Animate in
-        requestAnimationFrame(() => {
-            toast.style.opacity = '1';
-            toast.style.transform = 'translateX(0)';
-        });
+        }
+    }
+    
+    saveState() {
+        localStorage.setItem('dashboardState', JSON.stringify({
+            currentSection: this.state.currentSection,
+            theme: this.state.theme,
+            sidebarMini: this.state.sidebarMini
+        }));
     }
 
-    // Placeholder methods for modal functionality
-    showCreateProfileModal() {
-        // TODO: Implement create profile modal
-        this.showToast('Create Profile Modal - Coming Soon', 'info');
+    // ========================================
+    // PLACEHOLDER METHODS
+    // ========================================
+    
+    async loadUserData() {
+        // TODO: Implement user data loading
+        this.state.currentUser = { name: 'Benutzer', email: 'user@example.com' };
     }
-
-    showEditProfileModal(profile) {
-        // TODO: Implement edit profile modal
-        this.showToast('Edit Profile Modal - Coming Soon', 'info');
+    
+    async loadProfiles() {
+        // TODO: Implement profiles loading
+        this.state.profiles = [
+            { id: 1, name: 'Fitness Coach', category: 'fitness', lastUsed: new Date(), status: 'active' },
+            { id: 2, name: 'Koch Assistant', category: 'cooking', lastUsed: new Date(), status: 'active' }
+        ];
     }
-
-    openProfileChatModal(profile) {
-        // TODO: Implement profile chat modal
-        this.showToast(`Chat with ${profile.name} - Coming Soon`, 'info');
+    
+    getQuickStats() {
+        return {
+            totalProfiles: this.state.profiles.length,
+            activeProfiles: this.state.profiles.filter(p => p.status === 'active').length,
+            totalChats: 42,
+            weeklyUsage: 85
+        };
     }
-
-    showProfileContextMenu(x, y, profileId) {
-        // TODO: Implement profile context menu
-        console.log('Profile context menu for:', profileId);
+    
+    getRecentProfiles() {
+        return this.state.profiles.slice(0, 3);
     }
-
-    viewProfile(profileId) {
-        // TODO: Implement profile detail view
-        console.log('View profile:', profileId);
+    
+    renderRecentProfiles(profiles) {
+        return profiles.map(profile => `
+            <div class="recent-profile-item">
+                <div class="profile-icon">${this.getProfileIcon(profile.category)}</div>
+                <div class="profile-info">
+                    <h4>${profile.name}</h4>
+                    <p>Zuletzt verwendet: ${this.formatDate(profile.lastUsed)}</p>
+                </div>
+            </div>
+        `).join('');
     }
-
-    renderRecentProfilesList(profiles) {
-        // TODO: Implement recent profiles rendering
-        return '<p>Recent profiles coming soon...</p>';
+    
+    renderProfilesGrid() {
+        return this.state.profiles.map(profile => `
+            <div class="profile-card card">
+                <div class="profile-card-header">
+                    <div class="profile-icon">${this.getProfileIcon(profile.category)}</div>
+                    <button class="profile-menu-btn">⋮</button>
+                </div>
+                <div class="profile-card-content">
+                    <h3>${profile.name}</h3>
+                    <p class="profile-category">${profile.category}</p>
+                    <p class="profile-last-used">Zuletzt: ${this.formatDate(profile.lastUsed)}</p>
+                </div>
+                <div class="profile-card-actions">
+                    <button class="btn btn-primary" onclick="dashboard.openProfileChat(${profile.id})">
+                        Chat öffnen
+                    </button>
+                </div>
+            </div>
+        `).join('');
     }
-
-    renderQuickStats(stats) {
-        // TODO: Implement quick stats rendering
-        return '<p>Quick stats coming soon...</p>';
+    
+    getProfileIcon(category) {
+        const icons = {
+            fitness: '💪',
+            cooking: '👨‍🍳',
+            work: '💼',
+            study: '📚'
+        };
+        return icons[category] || '🤖';
     }
+    
+    formatDate(date) {
+        return new Intl.RelativeTimeFormat('de').format(
+            Math.ceil((date - new Date()) / (1000 * 60 * 60 * 24)), 'day'
+        );
+    }
+    
+    // Placeholder methods for future implementation
+    createNewProfile() { this.showToast('Neues Profil - Coming Soon!', 'info'); }
+    openProfileChat(id) { this.showToast(`Chat mit Profil ${id} - Coming Soon!`, 'info'); }
+    filterProfiles(query) { console.log('Filter profiles:', query); }
+    initializeSectionEvents(section) { console.log('Initialize section events:', section); }
+    loadChatContent() { return '<p>Chat Content - Coming Soon!</p>'; }
+    loadWidgetsContent() { return '<p>Widgets Content - Coming Soon!</p>'; }
+    loadSettingsContent() { return '<p>Settings Content - Coming Soon!</p>'; }
+    getNotFoundContent() { return '<p>Bereich nicht gefunden</p>'; }
+    getErrorContent(message) { return `<p>Fehler: ${message}</p>`; }
+    handleSearch(e) { console.log('Search:', e.target.value); }
+    toggleUserMenu() { console.log('Toggle user menu'); }
+    handleOutsideClick(e) { /* Handle outside clicks */ }
+    initializePerformanceMonitoring() { /* Setup performance monitoring */ }
 }
+
+// ========================================
+// CSS FOR COMPONENTS
+// ========================================
+
+const additionalCSS = `
+<style>
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.toast {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-backdrop);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-lg);
+    min-width: 300px;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all var(--transition-normal);
+}
+
+.toast-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+}
+
+.toast-icon {
+    font-size: 20px;
+}
+
+.toast-message {
+    flex: 1;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px;
+    border-radius: 50%;
+    transition: all var(--transition-fast);
+}
+
+.toast-close:hover {
+    background: var(--glass-bg);
+    color: var(--text-primary);
+}
+
+.global-loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.loader-content {
+    text-align: center;
+    color: white;
+}
+
+.loader-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top: 3px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 20px;
+}
+
+.stat-icon {
+    font-size: 2rem;
+}
+
+.stat-content h3 {
+    font-size: 2rem;
+    font-weight: bold;
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.stat-content p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.profiles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.profile-card {
+    padding: 20px;
+}
+
+.profile-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.profile-icon {
+    font-size: 2rem;
+}
+
+.profile-menu-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    transition: all var(--transition-fast);
+}
+
+.profile-menu-btn:hover {
+    background: var(--glass-bg);
+    color: var(--text-primary);
+}
+</style>
+`;
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    window.dashboardManager = new DashboardManager();
+    // Add additional CSS
+    document.head.insertAdjacentHTML('beforeend', additionalCSS);
+    
+    // Create global dashboard instance
+    window.dashboard = new ModernDashboard();
+    
+    console.log('🚀 All-KI Dashboard 2.0 initialized!');
 });

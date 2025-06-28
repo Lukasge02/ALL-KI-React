@@ -1,300 +1,653 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="dark">
 <head>
+    <!-- ========================================
+         META TAGS & VIEWPORT
+         ======================================== -->
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>All-KI Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="description" content="All-KI - Ihr intelligenter Alltagsassistent mit KI-Power">
+    <meta name="keywords" content="KI, AI, Assistent, Dashboard, ChatGPT, OpenAI, Produktivität">
+    <meta name="author" content="All-KI Team">
+    <meta name="robots" content="noindex, nofollow">
+    
+    <!-- ========================================
+         PWA MANIFEST & ICONS
+         ======================================== -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="All-KI">
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    
+    <!-- ========================================
+         PRECONNECT & PREFETCH
+         ======================================== -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="https://api.openai.com">
+    
+    <!-- ========================================
+         FONTS
+         ======================================== -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/dashboard.css">
+    
+    <!-- ========================================
+         STYLES
+         ======================================== -->
+    <link rel="stylesheet" href="/css/dashboard.css">
+    
+    <!-- ========================================
+         TITLE
+         ======================================== -->
+    <title>All-KI Dashboard - Ihr smarter Assistent</title>
+    
+    <!-- ========================================
+         SECURITY & PERFORMANCE
+         ======================================== -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    
+    <!-- Preload critical CSS -->
+    <link rel="preload" href="/css/dashboard.css" as="style">
+    
+    <!-- Preload critical JS -->
+    <link rel="preload" href="/js/dashboard.js" as="script">
 </head>
+
 <body>
-    <div class="dashboard-container">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-top">
-                <h2 class="logo">ALL-KI</h2>
-                <nav class="nav-links">
-                    <a href="#" class="nav-link active" data-section="home">
-                        <span class="icon">🏠</span>
-                        <span class="text">Startseite</span>
-                    </a>
-                    <a href="#" class="nav-link" data-section="profiles">
-                        <span class="icon">👤</span>
-                        <span class="text">Profile</span>
-                    </a>
-                    <a href="#" class="nav-link" data-section="calendar">
-                        <span class="icon">📅</span>
-                        <span class="text">Kalender</span>
-                    </a>
-                    <a href="#" class="nav-link" data-section="email">
-                        <span class="icon">📧</span>
-                        <span class="text">E-Mail</span>
-                    </a>
-                    <a href="#" class="nav-link" data-section="widgets">
-                        <span class="icon">🧩</span>
-                        <span class="text">Widgets</span>
-                    </a>
-                </nav>
+    <!-- ========================================
+         LOADING SCREEN
+         ======================================== -->
+    <div id="initial-loader" class="initial-loader">
+        <div class="loader-content">
+            <div class="loader-logo">
+                <div class="logo-icon">🚀</div>
+                <div class="logo-text">All-KI</div>
             </div>
-            <div class="sidebar-bottom">
-                <a href="#" class="nav-link">
-                    <span class="icon">ℹ️</span>
-                    <span class="text">Infos</span>
-                </a>
-                <a href="#" class="nav-link">
-                    <span class="icon">⚙️</span>
-                    <span class="text">Einstellungen</span>
-                </a>
-                <a href="#" class="nav-link" id="logout-btn">
-                    <span class="icon">🚪</span>
-                    <span class="text">Abmelden</span>
-                </a>
+            <div class="loader-spinner"></div>
+            <div class="loader-text">Dashboard wird geladen...</div>
+            <div class="loader-progress">
+                <div class="progress-bar"></div>
             </div>
         </div>
+    </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Header -->
-            <div class="header">
-                <div class="search-container">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" 
-                           class="search-input" 
-                           placeholder="All-KI fragen..." 
-                           id="quickChatInput">
-                    <button class="search-btn" id="quickChatBtn">
-                        <span>→</span>
-                    </button>
-                </div>
-                <div class="header-right">
-                    <span class="user-greeting" id="userGreeting">Willkommen!</span>
-                    <div class="user-avatar" id="userAvatar">
-                        <span>👤</span>
+    <!-- ========================================
+         MAIN DASHBOARD CONTAINER
+         ======================================== -->
+    <div class="dashboard-container">
+        
+        <!-- ========================================
+             SIDEBAR NAVIGATION
+             ======================================== -->
+        <aside class="sidebar" id="sidebar">
+            <!-- Sidebar Header -->
+            <div class="sidebar-header">
+                <a href="/dashboard" class="logo">
+                    <div class="logo-icon">🚀</div>
+                    <div class="logo-text">All-KI</div>
+                </a>
+                <button class="sidebar-toggle" id="sidebarToggle" aria-label="Sidebar umschalten" title="Sidebar umschalten"></button>
+            </div>
+            
+            <!-- Sidebar Navigation -->
+            <nav class="sidebar-nav" role="navigation" aria-label="Hauptnavigation">
+                <!-- Main Navigation -->
+                <div class="nav-section">
+                    <div class="nav-section-title">Hauptbereich</div>
+                    
+                    <div class="nav-item">
+                        <a href="#home" class="nav-link active" data-section="home" role="menuitem">
+                            <div class="nav-icon">🏠</div>
+                            <div class="nav-text">Dashboard</div>
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="#profiles" class="nav-link" data-section="profiles" role="menuitem">
+                            <div class="nav-icon">👤</div>
+                            <div class="nav-text">Profile</div>
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="#chat" class="nav-link" data-section="chat" role="menuitem">
+                            <div class="nav-icon">💬</div>
+                            <div class="nav-text">Chat</div>
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="#widgets" class="nav-link" data-section="widgets" role="menuitem">
+                            <div class="nav-icon">🧩</div>
+                            <div class="nav-text">Widgets</div>
+                        </a>
                     </div>
                 </div>
-            </div>
-
-            <!-- Content Sections -->
-            <div class="content">
-                <!-- Home Section -->
-                <div class="content-section active" id="home-section">
-                    <h1 class="section-title">Dashboard</h1>
+                
+                <!-- Tools Navigation -->
+                <div class="nav-section">
+                    <div class="nav-section-title">Tools</div>
                     
-                    <!-- Profile Tabs -->
-                    <div class="profile-tabs">
-                        <div class="tabs-container" id="profileTabs">
-                            <div class="tab active" data-profile="general">
-                                <span>📋 Allgemein</span>
-                            </div>
-                        </div>
-                        <button class="add-tab-btn" id="addProfileBtn">
-                            <span>+</span>
+                    <div class="nav-item">
+                        <a href="#analytics" class="nav-link" data-section="analytics" role="menuitem">
+                            <div class="nav-icon">📊</div>
+                            <div class="nav-text">Analytics</div>
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="#templates" class="nav-link" data-section="templates" role="menuitem">
+                            <div class="nav-icon">📋</div>
+                            <div class="nav-text">Vorlagen</div>
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="#integrations" class="nav-link" data-section="integrations" role="menuitem">
+                            <div class="nav-icon">🔗</div>
+                            <div class="nav-text">Integrationen</div>
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Settings Navigation -->
+                <div class="nav-section">
+                    <div class="nav-section-title">Einstellungen</div>
+                    
+                    <div class="nav-item">
+                        <a href="#settings" class="nav-link" data-section="settings" role="menuitem">
+                            <div class="nav-icon">⚙️</div>
+                            <div class="nav-text">Einstellungen</div>
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="#help" class="nav-link" data-section="help" role="menuitem">
+                            <div class="nav-icon">❓</div>
+                            <div class="nav-text">Hilfe</div>
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="nav-section">
+                    <div class="nav-section-title">Schnellzugriff</div>
+                    
+                    <div class="nav-item">
+                        <button class="nav-link" onclick="dashboard.createNewProfile()" role="menuitem">
+                            <div class="nav-icon">➕</div>
+                            <div class="nav-text">Neues Profil</div>
                         </button>
                     </div>
-
-                    <!-- Dashboard Grid -->
-                    <div class="dashboard-grid">
-                        <div class="dashboard-left">
-                            <div class="widget widget-overview">
-                                <h3>📆 Tagesüberblick</h3>
-                                <ul class="overview-list">
-                                    <li>
-                                        <span class="overview-icon">📌</span>
-                                        <span>Willkommen bei All-KI!</span>
-                                    </li>
-                                    <li>
-                                        <span class="overview-icon">🎯</span>
-                                        <span>Erstellen Sie Ihr erstes Profil</span>
-                                    </li>
-                                    <li>
-                                        <span class="overview-icon">💬</span>
-                                        <span>Stellen Sie der KI Fragen</span>
-                                    </li>
-                                    <li>
-                                        <span class="overview-icon">🔧</span>
-                                        <span>Konfigurieren Sie Widgets</span>
-                                    </li>
-                                </ul>
-                            </div>
-                            
-                            <div class="widget widget-weather">
-                                <h3>🌦 Wetter</h3>
-                                <div class="weather-content">
-                                    <div class="weather-main">
-                                        <span class="weather-temp">22°</span>
-                                        <div class="weather-info">
-                                            <div>Teilweise bewölkt</div>
-                                            <div>Frankfurt am Main</div>
-                                            <div>Regenwahrscheinlichkeit: 20%</div>
-                                        </div>
-                                    </div>
+                    
+                    <div class="nav-item">
+                        <button class="nav-link" onclick="dashboard.navigateToSection('chat')" role="menuitem">
+                            <div class="nav-icon">⚡</div>
+                            <div class="nav-text">Schnell-Chat</div>
+                        </button>
+                    </div>
+                </div>
+            </nav>
+            
+            <!-- Sidebar Footer -->
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <div class="user-details">
+                        <div class="user-name" id="userName">Benutzer</div>
+                        <div class="user-plan" id="userPlan">Free Plan</div>
+                    </div>
+                </div>
+                
+                <div class="connection-status" id="connectionStatus">
+                    <div class="status-indicator online"></div>
+                    <div class="status-text">Online</div>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- ========================================
+             MAIN CONTENT AREA
+             ======================================== -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="main-header">
+                <div class="header-left">
+                    <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Menü öffnen">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </button>
+                    <h1 class="page-title" id="pageTitle">Dashboard</h1>
+                </div>
+                
+                <div class="header-center">
+                    <!-- Global Search -->
+                    <div class="search-container">
+                        <div class="search-icon">🔍</div>
+                        <input 
+                            type="text" 
+                            class="search-input" 
+                            placeholder="Durchsuchen... (Ctrl+K)" 
+                            id="globalSearch"
+                            autocomplete="off"
+                            spellcheck="false"
+                        >
+                        <div class="search-shortcut">⌘K</div>
+                    </div>
+                </div>
+                
+                <div class="header-right">
+                    <!-- Notifications -->
+                    <button class="header-btn notification-btn" id="notificationBtn" aria-label="Benachrichtigungen" title="Benachrichtigungen">
+                        <span class="icon">🔔</span>
+                        <span class="badge" id="notificationBadge">3</span>
+                    </button>
+                    
+                    <!-- Theme Toggle -->
+                    <button class="header-btn theme-toggle" id="themeToggle" aria-label="Theme wechseln" title="Theme wechseln">
+                        <span class="icon">🌙</span>
+                    </button>
+                    
+                    <!-- Help -->
+                    <button class="header-btn help-btn" id="helpBtn" aria-label="Hilfe" title="Hilfe">
+                        <span class="icon">❓</span>
+                    </button>
+                    
+                    <!-- User Menu -->
+                    <div class="user-menu" id="userMenu">
+                        <button class="user-avatar" id="headerUserAvatar" aria-label="Benutzermenü" title="Benutzermenü">
+                            <span>U</span>
+                        </button>
+                        
+                        <!-- User Dropdown (hidden by default) -->
+                        <div class="user-dropdown" id="userDropdown">
+                            <div class="dropdown-header">
+                                <div class="user-info">
+                                    <div class="user-name" id="dropdownUserName">Benutzer</div>
+                                    <div class="user-email" id="dropdownUserEmail">user@example.com</div>
                                 </div>
                             </div>
                             
-                            <div class="widget add-widget" id="addWidgetBtn">
-                                <span class="plus-symbol">+</span>
-                                <span class="add-text">Widget hinzufügen</span>
-                            </div>
-                        </div>
-
-                        <div class="dashboard-right">
-                            <div class="widget widget-news">
-                                <h3>📰 Nachrichten</h3>
-                                <ul class="news-list">
-                                    <li>KI-Durchbrüche in der Medizin</li>
-                                    <li>Neue Technologien 2025</li>
-                                    <li>Klimawandel: Aktuelle Entwicklungen</li>
-                                    <li>Fortschritte in der Quantencomputerei</li>
-                                </ul>
-                            </div>
+                            <div class="dropdown-divider"></div>
                             
-                            <div class="widget widget-schedule">
-                                <h3>📅 Heute</h3>
-                                <ul class="schedule-list">
-                                    <li>
-                                        <span class="schedule-time">09:00</span>
-                                        <span>Willkommen bei All-KI</span>
-                                    </li>
-                                    <li>
-                                        <span class="schedule-time">13:00</span>
-                                        <span>Erkunden Sie die Features</span>
-                                    </li>
-                                    <li>
-                                        <span class="schedule-time">15:00</span>
-                                        <span>Erstellen Sie Ihr Profil</span>
-                                    </li>
-                                </ul>
-                            </div>
+                            <a href="#profile" class="dropdown-item">
+                                <span class="icon">👤</span>
+                                <span>Profil bearbeiten</span>
+                            </a>
                             
-                            <div class="widget widget-schedule">
-                                <h3>🔜 Morgen</h3>
-                                <ul class="schedule-list">
-                                    <li>
-                                        <span class="schedule-time">08:30</span>
-                                        <span>Nutzen Sie die KI-Assistenz</span>
-                                    </li>
-                                    <li>
-                                        <span class="schedule-time">11:00</span>
-                                        <span>Konfigurieren Sie Widgets</span>
-                                    </li>
-                                    <li>
-                                        <span class="schedule-time">14:00</span>
-                                        <span>Optimieren Sie Ihren Workflow</span>
-                                    </li>
-                                </ul>
-                            </div>
+                            <a href="#settings" class="dropdown-item">
+                                <span class="icon">⚙️</span>
+                                <span>Einstellungen</span>
+                            </a>
+                            
+                            <a href="#billing" class="dropdown-item">
+                                <span class="icon">💳</span>
+                                <span>Abonnement</span>
+                            </a>
+                            
+                            <div class="dropdown-divider"></div>
+                            
+                            <a href="#help" class="dropdown-item">
+                                <span class="icon">❓</span>
+                                <span>Hilfe & Support</span>
+                            </a>
+                            
+                            <a href="#feedback" class="dropdown-item">
+                                <span class="icon">💬</span>
+                                <span>Feedback geben</span>
+                            </a>
+                            
+                            <div class="dropdown-divider"></div>
+                            
+                            <button class="dropdown-item logout-btn" onclick="dashboard.logout()">
+                                <span class="icon">🚪</span>
+                                <span>Abmelden</span>
+                            </button>
                         </div>
                     </div>
                 </div>
-
-                <!-- Profiles Section -->
-                <div class="content-section" id="profiles-section">
-                    <h1 class="section-title">Profile verwalten</h1>
-                    <div class="profiles-container">
-                        <div class="profile-card add-profile" id="createProfileBtn">
-                            <div class="profile-icon">+</div>
-                            <h3>Neues Profil erstellen</h3>
-                            <p>Erstellen Sie ein personalisiertes KI-Profil für verschiedene Lebensbereiche</p>
-                        </div>
-                    </div>
+            </header>
+            
+            <!-- ========================================
+                 DYNAMIC CONTENT AREA
+                 ======================================== -->
+            <div class="content-area" id="contentArea" role="main">
+                <!-- Content wird dynamisch durch JavaScript geladen -->
+                <div class="content-placeholder">
+                    <div class="placeholder-icon">⚡</div>
+                    <div class="placeholder-title">Dashboard wird geladen...</div>
+                    <div class="placeholder-text">Einen Moment bitte, während wir alles für Sie vorbereiten.</div>
                 </div>
-
-                <!-- Other sections placeholder -->
-                <div class="content-section" id="calendar-section">
-                    <h1 class="section-title">Kalender</h1>
-                    <div class="placeholder-content">
-                        <p>🗓️ Kalender-Integration wird hier implementiert</p>
-                    </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- ========================================
+         MODALS & OVERLAYS
+         ======================================== -->
+    
+    <!-- Notification Dropdown -->
+    <div class="notification-dropdown" id="notificationDropdown">
+        <div class="dropdown-header">
+            <h3>Benachrichtigungen</h3>
+            <button class="mark-all-read" onclick="dashboard.markAllNotificationsRead()">
+                Alle als gelesen markieren
+            </button>
+        </div>
+        
+        <div class="notification-list" id="notificationList">
+            <!-- Notifications werden dynamisch geladen -->
+            <div class="notification-item unread">
+                <div class="notification-icon">🎉</div>
+                <div class="notification-content">
+                    <div class="notification-title">Willkommen bei All-KI!</div>
+                    <div class="notification-text">Ihr Account wurde erfolgreich erstellt.</div>
+                    <div class="notification-time">vor 5 Minuten</div>
                 </div>
-
-                <div class="content-section" id="email-section">
-                    <h1 class="section-title">E-Mail</h1>
-                    <div class="placeholder-content">
-                        <p>📧 E-Mail-Integration wird hier implementiert</p>
-                    </div>
-                </div>
-
-                <div class="content-section" id="widgets-section">
-                    <h1 class="section-title">Widgets</h1>
-                    <div class="placeholder-content">
-                        <p>🧩 Widget-Konfiguration wird hier implementiert</p>
-                    </div>
+            </div>
+            
+            <div class="notification-item">
+                <div class="notification-icon">🤖</div>
+                <div class="notification-content">
+                    <div class="notification-title">Neues KI-Modell verfügbar</div>
+                    <div class="notification-text">GPT-4 ist jetzt in Ihrem Plan verfügbar.</div>
+                    <div class="notification-time">vor 2 Stunden</div>
                 </div>
             </div>
         </div>
+        
+        <div class="dropdown-footer">
+            <a href="#notifications" class="view-all-btn">Alle anzeigen</a>
+        </div>
     </div>
-
-    <!-- Modals -->
-    <!-- Quick Chat Modal -->
-    <div class="modal-overlay hidden" id="quickChatModal">
+    
+    <!-- Quick Action Modal -->
+    <div class="modal" id="quickActionModal">
+        <div class="modal-overlay" onclick="dashboard.closeModal('quickActionModal')"></div>
         <div class="modal-content">
             <div class="modal-header">
-                <h3>💬 Quick Chat</h3>
-                <button class="modal-close" id="closeQuickChat">✕</button>
+                <h2>Schnelle Aktion</h2>
+                <button class="modal-close" onclick="dashboard.closeModal('quickActionModal')">&times;</button>
             </div>
-            <div class="chat-messages" id="chatMessages">
-                <div class="chat-message ai-message">
-                    <span class="message-avatar">🤖</span>
-                    <div class="message-content">
-                        <p>Hallo! Wie kann ich Ihnen heute helfen?</p>
-                    </div>
-                </div>
-            </div>
-            <div class="chat-input-container">
-                <input type="text" 
-                       class="chat-input" 
-                       placeholder="Nachricht eingeben..." 
-                       id="chatInput">
-                <button class="chat-send-btn" id="chatSendBtn">→</button>
+            <div class="modal-body">
+                <!-- Modal content wird dynamisch geladen -->
             </div>
         </div>
     </div>
-
-    <!-- Profile Creation Modal -->
-    <div class="modal-overlay hidden" id="profileModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>➕ Neues Profil erstellen</h3>
-                <button class="modal-close" id="closeProfileModal">✕</button>
-            </div>
-            <div class="profile-creation">
-                <div class="profile-preview" id="profilePreview">
-                    <h4>📋 Profil-Vorschau</h4>
-                    <p>Informationen werden während des Interviews gesammelt...</p>
-                </div>
-                <div class="profile-chat" id="profileChat">
-                    <div class="chat-messages" id="profileChatMessages">
-                        <div class="chat-message ai-message">
-                            <span class="message-avatar">🤖</span>
-                            <div class="message-content">
-                                <p>Hallo! Lassen Sie uns gemeinsam ein neues Profil erstellen. Wie soll Ihr Profil heißen?</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="chat-input-container">
-                        <input type="text" 
-                               class="chat-input" 
-                               placeholder="Antwort eingeben..." 
-                               id="profileChatInput">
-                        <button class="chat-send-btn" id="profileChatSendBtn">→</button>
-                    </div>
-                    <button class="btn-primary hidden" id="saveProfileBtn">
-                        ✅ Profil erstellen
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Loading Overlay -->
-    <div class="loading-overlay hidden" id="loadingOverlay">
-        <div class="loading-spinner"></div>
-        <p>Einen Moment bitte...</p>
-    </div>
-
-    <!-- Toast Container -->
+    
+    <!-- ========================================
+         TOAST NOTIFICATIONS CONTAINER
+         ======================================== -->
     <div class="toast-container" id="toastContainer"></div>
-
-    <script src="js/dashboard.js"></script>
+    
+    <!-- ========================================
+         KEYBOARD SHORTCUTS HELP
+         ======================================== -->
+    <div class="shortcuts-overlay" id="shortcutsOverlay">
+        <div class="shortcuts-content">
+            <div class="shortcuts-header">
+                <h3>Tastenkürzel</h3>
+                <button class="shortcuts-close" onclick="dashboard.hideShortcuts()">&times;</button>
+            </div>
+            
+            <div class="shortcuts-grid">
+                <div class="shortcut-item">
+                    <kbd>Ctrl</kbd> + <kbd>K</kbd>
+                    <span>Suche öffnen</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>Ctrl</kbd> + <kbd>N</kbd>
+                    <span>Neues Profil</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>Ctrl</kbd> + <kbd>/</kbd>
+                    <span>Sidebar umschalten</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>?</kbd>
+                    <span>Diese Hilfe anzeigen</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>Esc</kbd>
+                    <span>Modals schließen</span>
+                </div>
+                <div class="shortcut-item">
+                    <kbd>Tab</kbd>
+                    <span>Navigation</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ========================================
+         PWA INSTALL PROMPT
+         ======================================== -->
+    <div class="install-prompt" id="installPrompt">
+        <div class="install-content">
+            <div class="install-icon">📱</div>
+            <div class="install-text">
+                <h4>All-KI installieren</h4>
+                <p>Installieren Sie All-KI für ein besseres App-Erlebnis!</p>
+            </div>
+            <div class="install-actions">
+                <button class="btn-install" onclick="dashboard.installApp()">Installieren</button>
+                <button class="btn-dismiss" onclick="dashboard.dismissInstallPrompt()">Später</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ========================================
+         OFFLINE INDICATOR
+         ======================================== -->
+    <div class="offline-indicator" id="offlineIndicator">
+        <div class="offline-content">
+            <span class="offline-icon">📡</span>
+            <span class="offline-text">Offline-Modus</span>
+        </div>
+    </div>
+    
+    <!-- ========================================
+         ACCESSIBILITY SKIP LINKS
+         ======================================== -->
+    <div class="skip-links">
+        <a href="#contentArea" class="skip-link">Zum Hauptinhalt springen</a>
+        <a href="#sidebar" class="skip-link">Zur Navigation springen</a>
+    </div>
+    
+    <!-- ========================================
+         SCRIPTS
+         ======================================== -->
+    
+    <!-- Service Worker Registration -->
+    <script>
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch(registrationError => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+        
+        // Hide loading screen when page is fully loaded
+        window.addEventListener('load', () => {
+            const loader = document.getElementById('initial-loader');
+            if (loader) {
+                loader.style.opacity = '0';
+                setTimeout(() => {
+                    loader.style.display = 'none';
+                }, 500);
+            }
+        });
+        
+        // Critical error handling
+        window.addEventListener('error', (event) => {
+            console.error('Critical error:', event.error);
+            // Could send to error tracking service
+        });
+        
+        // Unhandled promise rejections
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+            event.preventDefault();
+        });
+    </script>
+    
+    <!-- Main Dashboard Script -->
+    <script src="/js/dashboard.js" defer></script>
+    
+    <!-- ========================================
+         NOSCRIPT FALLBACK
+         ======================================== -->
+    <noscript>
+        <div class="noscript-message">
+            <h2>JavaScript erforderlich</h2>
+            <p>Diese Anwendung benötigt JavaScript, um ordnungsgemäß zu funktionieren. Bitte aktivieren Sie JavaScript in Ihrem Browser.</p>
+        </div>
+    </noscript>
+    
+    <!-- ========================================
+         CRITICAL CSS FOR LOADING
+         ======================================== -->
+    <style>
+        .initial-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a0a 0%, #151515 50%, #1f1f1f 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        
+        .loader-content {
+            text-align: center;
+            color: white;
+        }
+        
+        .loader-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+        
+        .loader-logo .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+        
+        .loader-logo .logo-text {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .loader-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        .loader-text {
+            font-size: 16px;
+            color: #b3b3b3;
+            margin-bottom: 20px;
+        }
+        
+        .loader-progress {
+            width: 200px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 0 auto;
+        }
+        
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 2px;
+            animation: progress 3s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        @keyframes progress {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+        
+        .noscript-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            padding: 2rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+        }
+        
+        .skip-links {
+            position: absolute;
+            top: -100px;
+            left: 0;
+            z-index: 10000;
+        }
+        
+        .skip-link {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: #000;
+            color: #fff;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 0 0 4px 0;
+        }
+        
+        .skip-link:focus {
+            top: 100px;
+        }
+    </style>
 </body>
 </html>

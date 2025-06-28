@@ -194,7 +194,10 @@ body {
 
 .features {
     text-align: left;
-    space-y: 2rem;
+}
+
+.features > * {
+    margin-bottom: 2rem;
 }
 
 .feature-item {
