@@ -1,352 +1,476 @@
-// auth.js - Login/Registrierung Funktionalität
+/**
+ * 🔐 AUTH JAVASCRIPT
+ * Login und Registrierung Funktionalität
+ * 
+ * SEPARATION OF CONCERNS:
+ * - Form Handling
+ * - API Communication  
+ * - Validation
+ * - UI Updates
+ * - Local Storage Management
+ */
 
 class AuthManager {
     constructor() {
-        this.init();
+        this.currentForm = 'login';
+        this.isLoading = false;
+        
+        this.initializeEventListeners();
+        this.loadStoredData();
     }
 
-    init() {
-        this.bindEvents();
-        this.setupFormValidation();
-    }
+    // ========================================
+    // INITIALIZATION
+    // ========================================
 
-    bindEvents() {
-        // Form switching
-        document.getElementById('showRegister').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.switchToRegister();
-        });
-
-        document.getElementById('showLogin').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.switchToLogin();
-        });
-
+    initializeEventListeners() {
         // Form submissions
-        document.getElementById('loginFormElement').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleLogin();
-        });
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+        }
+        
+        if (registerForm) {
+            registerForm.addEventListener('submit', (e) => this.handleRegister(e));
+        }
 
-        document.getElementById('registerFormElement').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleRegister();
-        });
+        // Form toggle buttons
+        const toggleToRegister = document.getElementById('toggleToRegister');
+        const toggleToLogin = document.getElementById('toggleToLogin');
+        
+        if (toggleToRegister) {
+            toggleToRegister.addEventListener('click', () => this.switchToRegister());
+        }
+        
+        if (toggleToLogin) {
+            toggleToLogin.addEventListener('click', () => this.switchToLogin());
+        }
 
-        // Password strength checking
-        document.getElementById('registerPassword').addEventListener('input', (e) => {
-            this.checkPasswordStrength(e.target.value);
-        });
+        // Real-time validation
+        this.setupRealTimeValidation();
+        
+        // Auto-login check
+        this.checkAutoLogin();
+    }
 
-        // Password confirmation validation
-        document.getElementById('confirmPassword').addEventListener('input', (e) => {
-            this.validatePasswordConfirmation();
+    setupRealTimeValidation() {
+        const inputs = document.querySelectorAll('input[type="email"], input[type="password"], input[type="text"]');
+        
+        inputs.forEach(input => {
+            input.addEventListener('blur', () => this.validateField(input));
+            input.addEventListener('input', () => this.clearErrors(input));
         });
     }
+
+    // ========================================
+    // FORM SWITCHING
+    // ========================================
 
     switchToRegister() {
         const loginForm = document.getElementById('loginForm');
         const registerForm = document.getElementById('registerForm');
         
-        loginForm.classList.add('hidden');
-        registerForm.classList.remove('hidden');
+        if (loginForm && registerForm) {
+            loginForm.classList.add('hidden');
+            registerForm.classList.remove('hidden');
+            this.currentForm = 'register';
+        }
     }
 
     switchToLogin() {
         const loginForm = document.getElementById('loginForm');
         const registerForm = document.getElementById('registerForm');
         
-        registerForm.classList.add('hidden');
-        loginForm.classList.remove('hidden');
+        if (loginForm && registerForm) {
+            registerForm.classList.add('hidden');
+            loginForm.classList.remove('hidden');
+            this.currentForm = 'login';
+        }
     }
 
-    async handleLogin() {
-        const email = document.getElementById('loginEmail').value;
-        const password = document.getElementById('loginPassword').value;
-        const rememberMe = document.getElementById('rememberMe').checked;
+    // ========================================
+    // FORM HANDLING
+    // ========================================
 
-        if (!this.validateEmail(email)) {
-            this.showToast('Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'error');
+    async handleLogin(event) {
+        event.preventDefault();
+        
+        if (this.isLoading) return;
+
+        const formData = new FormData(event.target);
+        const loginData = {
+            email: formData.get('email'),
+            password: formData.get('password')
+        };
+
+        // Validate form
+        if (!this.validateLoginForm(loginData)) {
             return;
         }
 
-        if (!password) {
-            this.showToast('Bitte geben Sie Ihr Passwort ein.', 'error');
-            return;
-        }
-
-        this.showLoading();
+        this.setLoadingState(true);
 
         try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email, password })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Login fehlgeschlagen');
+            const response = await this.apiCall('/api/auth/login', 'POST', loginData);
+            
+            if (response.success) {
+                this.handleLoginSuccess(response);
+            } else {
+                this.showError(response.message || 'Login fehlgeschlagen');
             }
             
-            // Store login state
-            if (rememberMe) {
-                localStorage.setItem('allKiRememberMe', 'true');
-            }
-            localStorage.setItem('allKiLoggedIn', 'true');
-            localStorage.setItem('allKiUserEmail', email);
-            localStorage.setItem('allKiAuthToken', data.token);
-
-            this.showToast('Erfolgreich angemeldet! Weiterleitung...', 'success');
-            
-            // Redirect to dashboard after short delay
-            setTimeout(() => {
-                window.location.href = '/dashboard.html';
-            }, 1500);
-
         } catch (error) {
-            this.showToast(error.message, 'error');
+            console.error('Login error:', error);
+            this.showError('Verbindungsfehler. Bitte versuchen Sie es später erneut.');
         } finally {
-            this.hideLoading();
+            this.setLoadingState(false);
         }
     }
 
-    async handleRegister() {
-        const firstName = document.getElementById('firstName').value;
-        const lastName = document.getElementById('lastName').value;
-        const email = document.getElementById('registerEmail').value;
-        const password = document.getElementById('registerPassword').value;
-        const confirmPassword = document.getElementById('confirmPassword').value;
-        const acceptTerms = document.getElementById('acceptTerms').checked;
-        const acceptNewsletter = document.getElementById('acceptNewsletter').checked;
+    async handleRegister(event) {
+        event.preventDefault();
+        
+        if (this.isLoading) return;
 
-        // Validation
-        if (!firstName || !lastName) {
-            this.showToast('Bitte geben Sie Ihren Vor- und Nachnamen ein.', 'error');
+        const formData = new FormData(event.target);
+        const registerData = {
+            firstName: formData.get('firstName'),
+            lastName: formData.get('lastName'),
+            email: formData.get('email'),
+            password: formData.get('password'),
+            confirmPassword: formData.get('confirmPassword')
+        };
+
+        // Validate form
+        if (!this.validateRegisterForm(registerData)) {
             return;
         }
 
-        if (!this.validateEmail(email)) {
-            this.showToast('Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'error');
-            return;
-        }
-
-        if (!this.isPasswordStrong(password)) {
-            this.showToast('Das Passwort muss mindestens 8 Zeichen lang sein und Buchstaben und Zahlen enthalten.', 'error');
-            return;
-        }
-
-        if (password !== confirmPassword) {
-            this.showToast('Die Passwörter stimmen nicht überein.', 'error');
-            return;
-        }
-
-        if (!acceptTerms) {
-            this.showToast('Bitte akzeptieren Sie die Nutzungsbedingungen.', 'error');
-            return;
-        }
-
-        this.showLoading();
+        this.setLoadingState(true);
 
         try {
-            const response = await fetch('/api/auth/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    firstName,
-                    lastName,
-                    email,
-                    password,
-                    acceptNewsletter
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Registrierung fehlgeschlagen');
+            const response = await this.apiCall('/api/auth/register', 'POST', registerData);
+            
+            if (response.success) {
+                this.handleRegisterSuccess(response);
+            } else {
+                this.showError(response.message || 'Registrierung fehlgeschlagen');
             }
             
-            // Store registration data
-            localStorage.setItem('allKiLoggedIn', 'true');
-            localStorage.setItem('allKiUserEmail', email);
-            localStorage.setItem('allKiUserName', `${firstName} ${lastName}`);
-            localStorage.setItem('allKiAuthToken', data.token);
-            
-            if (acceptNewsletter) {
-                localStorage.setItem('allKiNewsletter', 'true');
-            }
-
-            this.showToast('Registrierung erfolgreich! Weiterleitung...', 'success');
-            
-            // Redirect to dashboard after short delay
-            setTimeout(() => {
-                window.location.href = '/dashboard.html';
-            }, 1500);
-
         } catch (error) {
-            this.showToast(error.message, 'error');
+            console.error('Register error:', error);
+            this.showError('Verbindungsfehler. Bitte versuchen Sie es später erneut.');
         } finally {
-            this.hideLoading();
+            this.setLoadingState(false);
         }
     }
 
-    checkPasswordStrength(password) {
-        const strengthIndicator = document.getElementById('passwordStrength');
-        
-        if (password.length === 0) {
-            strengthIndicator.className = 'password-strength';
-            return;
+    // ========================================
+    // VALIDATION
+    // ========================================
+
+    validateLoginForm(data) {
+        let isValid = true;
+
+        // Email validation
+        if (!data.email || !this.isValidEmail(data.email)) {
+            this.showFieldError('email', 'Bitte geben Sie eine gültige E-Mail-Adresse ein');
+            isValid = false;
         }
 
-        let strength = 0;
-        
-        // Length check
-        if (password.length >= 8) strength++;
-        if (password.length >= 12) strength++;
-        
-        // Character variety checks
-        if (/[a-z]/.test(password)) strength++;
-        if (/[A-Z]/.test(password)) strength++;
-        if (/[0-9]/.test(password)) strength++;
-        if (/[^A-Za-z0-9]/.test(password)) strength++;
-
-        if (strength <= 2) {
-            strengthIndicator.className = 'password-strength weak';
-        } else if (strength <= 4) {
-            strengthIndicator.className = 'password-strength medium';
-        } else {
-            strengthIndicator.className = 'password-strength strong';
+        // Password validation
+        if (!data.password || data.password.length < 6) {
+            this.showFieldError('password', 'Passwort muss mindestens 6 Zeichen haben');
+            isValid = false;
         }
+
+        return isValid;
     }
 
-    validatePasswordConfirmation() {
-        const password = document.getElementById('registerPassword').value;
-        const confirmPassword = document.getElementById('confirmPassword').value;
-        const confirmInput = document.getElementById('confirmPassword');
+    validateRegisterForm(data) {
+        let isValid = true;
 
-        if (confirmPassword && password !== confirmPassword) {
-            confirmInput.style.borderColor = 'var(--secondary-red)';
-        } else {
-            confirmInput.style.borderColor = 'var(--glass-border)';
+        // First name validation
+        if (!data.firstName || data.firstName.trim().length < 2) {
+            this.showFieldError('firstName', 'Vorname muss mindestens 2 Zeichen haben');
+            isValid = false;
         }
+
+        // Last name validation
+        if (!data.lastName || data.lastName.trim().length < 2) {
+            this.showFieldError('lastName', 'Nachname muss mindestens 2 Zeichen haben');
+            isValid = false;
+        }
+
+        // Email validation
+        if (!data.email || !this.isValidEmail(data.email)) {
+            this.showFieldError('email', 'Bitte geben Sie eine gültige E-Mail-Adresse ein');
+            isValid = false;
+        }
+
+        // Password validation
+        if (!data.password || data.password.length < 6) {
+            this.showFieldError('password', 'Passwort muss mindestens 6 Zeichen haben');
+            isValid = false;
+        }
+
+        // Confirm password validation
+        if (data.password !== data.confirmPassword) {
+            this.showFieldError('confirmPassword', 'Passwörter stimmen nicht überein');
+            isValid = false;
+        }
+
+        return isValid;
     }
 
-    validateEmail(email) {
+    validateField(input) {
+        const value = input.value.trim();
+        const fieldName = input.name;
+
+        switch (fieldName) {
+            case 'email':
+                if (!this.isValidEmail(value)) {
+                    this.showFieldError(fieldName, 'Ungültige E-Mail-Adresse');
+                    return false;
+                }
+                break;
+            case 'password':
+                if (value.length < 6) {
+                    this.showFieldError(fieldName, 'Mindestens 6 Zeichen erforderlich');
+                    return false;
+                }
+                break;
+            case 'firstName':
+            case 'lastName':
+                if (value.length < 2) {
+                    this.showFieldError(fieldName, 'Mindestens 2 Zeichen erforderlich');
+                    return false;
+                }
+                break;
+        }
+
+        this.clearFieldError(fieldName);
+        return true;
+    }
+
+    isValidEmail(email) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
     }
 
-    isPasswordStrong(password) {
-        return password.length >= 8 && /[A-Za-z]/.test(password) && /[0-9]/.test(password);
+    // ========================================
+    // API COMMUNICATION
+    // ========================================
+
+    async apiCall(url, method, data = null) {
+        const options = {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        };
+
+        if (data) {
+            options.body = JSON.stringify(data);
+        }
+
+        const response = await fetch(url, options);
+        return await response.json();
     }
 
-    setupFormValidation() {
-        // Real-time validation for all inputs
-        const inputs = document.querySelectorAll('input[required]');
-        inputs.forEach(input => {
-            input.addEventListener('blur', () => {
-                if (!input.value) {
-                    input.style.borderColor = 'var(--secondary-red)';
-                } else {
-                    input.style.borderColor = 'var(--glass-border)';
-                }
-            });
+    // ========================================
+    // SUCCESS HANDLERS
+    // ========================================
 
-            input.addEventListener('focus', () => {
-                input.style.borderColor = 'var(--primary-turquoise)';
-            });
-        });
-    }
+    handleLoginSuccess(response) {
+        // Store user data
+        if (response.token) {
+            localStorage.setItem('authToken', response.token);
+        }
+        
+        if (response.user) {
+            localStorage.setItem('userData', JSON.stringify(response.user));
+        }
 
-    showLoading() {
-        document.getElementById('loadingOverlay').classList.remove('hidden');
-    }
+        this.showSuccess('Erfolgreich angemeldet! Weiterleitung...');
 
-    hideLoading() {
-        document.getElementById('loadingOverlay').classList.add('hidden');
-    }
-
-    showToast(message, type = 'info') {
-        const toastContainer = document.getElementById('toastContainer');
-        
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        
-        toastContainer.appendChild(toast);
-        
-        // Click to dismiss
-        toast.addEventListener('click', () => {
-            this.removeToast(toast);
-        });
-        
-        // Auto remove after 4 seconds
+        // Redirect to dashboard
         setTimeout(() => {
-            this.removeToast(toast);
-        }, 4000);
+            window.location.href = '/dashboard';
+        }, 1500);
     }
 
-    removeToast(toast) {
-        if (toast.parentNode) {
-            toast.style.animation = 'slideOutRight 0.3s ease-in forwards';
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
+    handleRegisterSuccess(response) {
+        this.showSuccess('Registrierung erfolgreich! Sie können sich jetzt anmelden.');
+        
+        // Switch to login form
+        setTimeout(() => {
+            this.switchToLogin();
+            
+            // Pre-fill email if available
+            if (response.email) {
+                const emailInput = document.querySelector('#loginForm input[name="email"]');
+                if (emailInput) {
+                    emailInput.value = response.email;
                 }
-            }, 300);
+            }
+        }, 2000);
+    }
+
+    // ========================================
+    // UI HELPERS
+    // ========================================
+
+    setLoadingState(loading) {
+        this.isLoading = loading;
+        
+        const submitBtns = document.querySelectorAll('.submit-btn');
+        const forms = document.querySelectorAll('.auth-form');
+        
+        submitBtns.forEach(btn => {
+            btn.disabled = loading;
+            btn.textContent = loading ? 'Wird verarbeitet...' : 
+                (btn.closest('#loginForm') ? 'Anmelden' : 'Registrieren');
+        });
+        
+        forms.forEach(form => {
+            form.classList.toggle('form-loading', loading);
+        });
+    }
+
+    showError(message, fieldName = null) {
+        if (fieldName) {
+            this.showFieldError(fieldName, message);
+        } else {
+            // Show general error
+            const existingError = document.querySelector('.general-error');
+            if (existingError) {
+                existingError.remove();
+            }
+
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'general-error error-message';
+            errorDiv.textContent = message;
+            
+            const activeForm = document.querySelector('.auth-form:not(.hidden)');
+            if (activeForm) {
+                activeForm.insertBefore(errorDiv, activeForm.firstChild);
+            }
         }
     }
 
-    // Check if user is already logged in
-    checkAuthStatus() {
-        const isLoggedIn = localStorage.getItem('allKiLoggedIn');
-        const rememberMe = localStorage.getItem('allKiRememberMe');
+    showSuccess(message) {
+        const existingMessages = document.querySelectorAll('.general-error, .general-success');
+        existingMessages.forEach(msg => msg.remove());
+
+        const successDiv = document.createElement('div');
+        successDiv.className = 'general-success success-message';
+        successDiv.textContent = message;
         
-        if (isLoggedIn === 'true' && rememberMe === 'true') {
-            // Auto redirect to dashboard if user chose to stay logged in
-            window.location.href = '/dashboard.html';
+        const activeForm = document.querySelector('.auth-form:not(.hidden)');
+        if (activeForm) {
+            activeForm.insertBefore(successDiv, activeForm.firstChild);
         }
     }
 
-    // Pre-fill email if remembered
-    prefillForm() {
-        const rememberedEmail = localStorage.getItem('allKiUserEmail');
-        const rememberMe = localStorage.getItem('allKiRememberMe');
+    showFieldError(fieldName, message) {
+        const input = document.querySelector(`input[name="${fieldName}"]`);
+        if (!input) return;
+
+        input.classList.add('form-error');
         
-        if (rememberedEmail && rememberMe === 'true') {
-            document.getElementById('loginEmail').value = rememberedEmail;
-            document.getElementById('rememberMe').checked = true;
+        // Remove existing error
+        const existingError = input.parentNode.querySelector('.error-message');
+        if (existingError) {
+            existingError.remove();
         }
+
+        // Add new error
+        const errorSpan = document.createElement('span');
+        errorSpan.className = 'error-message';
+        errorSpan.textContent = message;
+        input.parentNode.appendChild(errorSpan);
+    }
+
+    clearFieldError(fieldName) {
+        const input = document.querySelector(`input[name="${fieldName}"]`);
+        if (!input) return;
+
+        input.classList.remove('form-error');
+        
+        const error = input.parentNode.querySelector('.error-message');
+        if (error) {
+            error.remove();
+        }
+    }
+
+    clearErrors(input) {
+        input.classList.remove('form-error');
+        const error = input.parentNode.querySelector('.error-message');
+        if (error) {
+            error.remove();
+        }
+    }
+
+    // ========================================
+    // AUTO-LOGIN & STORAGE
+    // ========================================
+
+    checkAutoLogin() {
+        const token = localStorage.getItem('authToken');
+        const userData = localStorage.getItem('userData');
+        
+        if (token && userData) {
+            // Check if token is still valid
+            this.validateStoredToken(token);
+        }
+    }
+
+    async validateStoredToken(token) {
+        try {
+            const response = await this.apiCall('/api/auth/validate', 'POST', { token });
+            
+            if (response.valid) {
+                // Token is valid, redirect to dashboard
+                window.location.href = '/dashboard';
+            } else {
+                // Token is invalid, clear storage
+                this.clearStoredData();
+            }
+        } catch (error) {
+            // Error validating token, clear storage
+            this.clearStoredData();
+        }
+    }
+
+    loadStoredData() {
+        // Pre-fill email if available
+        const lastEmail = localStorage.getItem('lastEmail');
+        if (lastEmail) {
+            const emailInput = document.querySelector('input[name="email"]');
+            if (emailInput) {
+                emailInput.value = lastEmail;
+            }
+        }
+    }
+
+    clearStoredData() {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
     }
 }
 
-// Initialize AuthManager when DOM is loaded
+// ========================================
+// INITIALIZATION
+// ========================================
+
 document.addEventListener('DOMContentLoaded', () => {
-    const authManager = new AuthManager();
-    
-    // Check if user should be auto-logged in
-    authManager.checkAuthStatus();
-    
-    // Pre-fill form if user data is remembered
-    authManager.prefillForm();
+    new AuthManager();
 });
 
-// Utility function to clear all auth data
-function clearAuthData() {
-    localStorage.removeItem('allKiLoggedIn');
-    localStorage.removeItem('allKiUserEmail');
-    localStorage.removeItem('allKiUserName');
-    localStorage.removeItem('allKiAuthToken');
-    localStorage.removeItem('allKiRememberMe');
-    localStorage.removeItem('allKiNewsletter');
+// Export for testing
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = AuthManager;
 }
-
-// Export for potential use in other scripts
-window.AuthManager = AuthManager;
-window.clearAuthData = clearAuthData;

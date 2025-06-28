@@ -1,38 +1,57 @@
-const mongoose = require('mongoose');
+/**
+ * 👤 USER MODEL
+ * MongoDB Schema für Benutzer-Daten
+ * 
+ * SEPARATION OF CONCERNS:
+ * - User Schema Definition
+ * - Password Hashing
+ * - Validation
+ * - Instance Methods
+ */
 
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+
+// User Schema Definition
 const userSchema = new mongoose.Schema({
-    // Basic user information
+    // Basic User Information
     firstName: {
         type: String,
         required: [true, 'Vorname ist erforderlich'],
         trim: true,
-        maxlength: [50, 'Vorname darf maximal 50 Zeichen lang sein']
+        maxlength: [50, 'Vorname darf maximal 50 Zeichen haben']
     },
+    
     lastName: {
         type: String,
         required: [true, 'Nachname ist erforderlich'],
         trim: true,
-        maxlength: [50, 'Nachname darf maximal 50 Zeichen lang sein']
+        maxlength: [50, 'Nachname darf maximal 50 Zeichen haben']
     },
+    
     email: {
         type: String,
         required: [true, 'E-Mail ist erforderlich'],
         unique: true,
-        lowercase: true,
         trim: true,
-        match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Bitte geben Sie eine gültige E-Mail-Adresse ein']
+        lowercase: true,
+        match: [
+            /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+            'Bitte geben Sie eine gültige E-Mail-Adresse ein'
+        ]
     },
+    
     password: {
         type: String,
         required: [true, 'Passwort ist erforderlich'],
-        minlength: [6, 'Passwort muss mindestens 6 Zeichen lang sein']
+        minlength: [6, 'Passwort muss mindestens 6 Zeichen haben']
     },
-
-    // User preferences and settings
+    
+    // User Preferences
     preferences: {
         theme: {
             type: String,
-            enum: ['light', 'dark', 'auto'],
+            enum: ['light', 'dark'],
             default: 'dark'
         },
         language: {
@@ -41,173 +60,178 @@ const userSchema = new mongoose.Schema({
             default: 'de'
         },
         notifications: {
-            type: Boolean,
-            default: true
+            email: { type: Boolean, default: true },
+            push: { type: Boolean, default: true },
+            sms: { type: Boolean, default: false }
         },
-        aiModel: {
-            type: String,
-            enum: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4o-mini'],
-            default: 'gpt-3.5-turbo'
-        },
-        dashboardLayout: {
-            type: String,
-            enum: ['compact', 'comfortable', 'spacious'],
-            default: 'comfortable'
+        privacy: {
+            profileVisible: { type: Boolean, default: false },
+            dataSharing: { type: Boolean, default: false }
         }
     },
-
-    // User statistics and activity tracking
-    stats: {
-        lastActive: {
-            type: Date,
-            default: Date.now
-        },
-        totalLogins: {
-            type: Number,
-            default: 0
-        },
-        totalProfiles: {
-            type: Number,
-            default: 0
-        },
-        totalChats: {
-            type: Number,
-            default: 0
-        },
-        totalMessages: {
-            type: Number,
-            default: 0
-        },
-        accountCreated: {
-            type: Date,
-            default: Date.now
-        }
+    
+    // Profile & Avatar
+    avatar: {
+        type: String,
+        default: null // URL oder Base64
     },
-
-    // Account status and permissions
+    
+    // Account Status
     isActive: {
         type: Boolean,
         default: true
     },
-    role: {
-        type: String,
-        enum: ['user', 'premium', 'admin'],
-        default: 'user'
+    
+    isVerified: {
+        type: Boolean,
+        default: false
     },
     
-    // Optional profile information
-    avatar: {
-        type: String,
+    lastLogin: {
+        type: Date,
         default: null
     },
-    bio: {
-        type: String,
-        maxlength: [500, 'Bio darf maximal 500 Zeichen lang sein'],
-        default: ''
-    },
-
-    // Privacy and security settings
-    privacy: {
-        profileVisible: {
-            type: Boolean,
-            default: false
-        },
-        shareAnalytics: {
-            type: Boolean,
-            default: true
-        }
-    }
-
+    
+    // AI Profile References
+    profiles: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Profile'
+    }],
+    
+    // Chat History References  
+    chats: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Chat'
+    }]
+    
 }, {
-    timestamps: true, // Automatically adds createdAt and updatedAt
-    collection: 'users'
+    timestamps: true, // Adds createdAt and updatedAt
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
-// Virtual for full name
+// ========================================
+// VIRTUAL PROPERTIES
+// ========================================
+
+// Full name virtual
 userSchema.virtual('fullName').get(function() {
     return `${this.firstName} ${this.lastName}`;
 });
 
-// Ensure virtual fields are serialized
-userSchema.set('toJSON', {
-    virtuals: true,
-    transform: function(doc, ret) {
-        delete ret.password; // Never return password in JSON
-        return ret;
+// Profile count virtual
+userSchema.virtual('profileCount').get(function() {
+    return this.profiles ? this.profiles.length : 0;
+});
+
+// ========================================
+// MIDDLEWARE (Pre/Post Hooks)
+// ========================================
+
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+    // Only hash the password if it has been modified (or is new)
+    if (!this.isModified('password')) return next();
+    
+    try {
+        // Hash password with cost of 12
+        const salt = await bcrypt.genSalt(12);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
     }
 });
 
-// Indexes for better query performance
-userSchema.index({ email: 1 });
-userSchema.index({ 'stats.lastActive': -1 });
-userSchema.index({ createdAt: -1 });
-
-// Pre-save middleware to update stats
-userSchema.pre('save', function(next) {
-    if (this.isModified('stats.lastActive')) {
-        this.stats.totalLogins += 1;
+// Update lastLogin on certain queries
+userSchema.pre('findOneAndUpdate', function() {
+    if (this.getUpdate().$set && this.getUpdate().$set.lastLogin === undefined) {
+        this.getUpdate().$set.lastLogin = new Date();
     }
-    next();
 });
 
-// Instance methods
+// ========================================
+// INSTANCE METHODS
+// ========================================
+
+// Compare password method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+    try {
+        return await bcrypt.compare(candidatePassword, this.password);
+    } catch (error) {
+        throw error;
+    }
+};
+
+// Get safe user object (without password)
 userSchema.methods.toSafeObject = function() {
     const userObject = this.toObject();
     delete userObject.password;
+    delete userObject.__v;
     return userObject;
 };
 
-userSchema.methods.updateLastActive = function() {
-    this.stats.lastActive = new Date();
-    this.stats.totalLogins += 1;
+// Update last login
+userSchema.methods.updateLastLogin = function() {
+    this.lastLogin = new Date();
     return this.save();
 };
 
-userSchema.methods.incrementStats = function(statType) {
-    if (this.stats[statType] !== undefined) {
-        this.stats[statType] += 1;
+// Add profile to user
+userSchema.methods.addProfile = function(profileId) {
+    if (!this.profiles.includes(profileId)) {
+        this.profiles.push(profileId);
         return this.save();
     }
     return Promise.resolve(this);
 };
 
-// Static methods
-userSchema.statics.findByEmail = function(email) {
-    return this.findOne({ email: email.toLowerCase() });
+// Remove profile from user  
+userSchema.methods.removeProfile = function(profileId) {
+    this.profiles = this.profiles.filter(id => !id.equals(profileId));
+    return this.save();
 };
 
-userSchema.statics.getActiveUsers = function(days = 30) {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-    
+// ========================================
+// STATIC METHODS
+// ========================================
+
+// Find user by email
+userSchema.statics.findByEmail = function(email) {
+    return this.findOne({ email: email.toLowerCase().trim() });
+};
+
+// Find active users
+userSchema.statics.findActive = function() {
+    return this.find({ isActive: true });
+};
+
+// Search users
+userSchema.statics.searchUsers = function(searchTerm) {
+    const regex = new RegExp(searchTerm, 'i');
     return this.find({
-        'stats.lastActive': { $gte: cutoffDate },
+        $or: [
+            { firstName: regex },
+            { lastName: regex },
+            { email: regex }
+        ],
         isActive: true
     });
 };
 
-userSchema.statics.getUserStats = function() {
-    return this.aggregate([
-        {
-            $group: {
-                _id: null,
-                totalUsers: { $sum: 1 },
-                activeUsers: {
-                    $sum: {
-                        $cond: [
-                            {
-                                $gte: ['$stats.lastActive', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)]
-                            },
-                            1,
-                            0
-                        ]
-                    }
-                },
-                avgTotalChats: { $avg: '$stats.totalChats' },
-                avgTotalMessages: { $avg: '$stats.totalMessages' }
-            }
-        }
-    ]);
-};
+// ========================================
+// INDEXES
+// ========================================
 
-module.exports = mongoose.model('User', userSchema);
+// Compound index for better query performance
+userSchema.index({ email: 1, isActive: 1 });
+userSchema.index({ firstName: 1, lastName: 1 });
+userSchema.index({ createdAt: -1 });
+
+// ========================================
+// MODEL EXPORT
+// ========================================
+
+const User = mongoose.model('User', userSchema);
+
+module.exports = User;
