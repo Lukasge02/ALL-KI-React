@@ -1,6 +1,6 @@
 /**
  * 🔐 AUTH CSS - LOGIN & REGISTER STYLES
- * Styling für Anmelde- und Registrierungsseiten
+ * Vollständige Styling für Anmelde- und Registrierungsseiten
  * 
  * SEPARATION OF CONCERNS:
  * - Layout & Container Styles
@@ -258,7 +258,7 @@ body {
 
 .auth-container {
     width: 100%;
-    max-width: 400px;
+    max-width: 450px;
 }
 
 .auth-form {
@@ -268,6 +268,7 @@ body {
     padding: 3rem;
     backdrop-filter: blur(20px);
     box-shadow: var(--shadow-heavy);
+    transition: all var(--transition-normal);
 }
 
 .form-header {
@@ -290,6 +291,21 @@ body {
 /* ========================================
    FORM STYLING
    ======================================== */
+
+.form {
+    width: 100%;
+}
+
+.input-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.input-row .form-group {
+    flex: 1;
+    margin-bottom: 0;
+}
 
 .form-group {
     margin-bottom: 1.5rem;
@@ -326,6 +342,72 @@ body {
     color: var(--text-muted);
 }
 
+/* Form Options */
+.form-options {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+/* Checkbox Styling */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.checkbox-container input[type="checkbox"] {
+    opacity: 0;
+    position: absolute;
+    width: 0;
+    height: 0;
+}
+
+.checkmark {
+    width: 18px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 4px;
+    position: relative;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.checkbox-container input[type="checkbox"]:checked + .checkmark {
+    background: var(--primary-turquoise);
+    border-color: var(--primary-turquoise);
+}
+
+.checkbox-container input[type="checkbox"]:checked + .checkmark::after {
+    content: '✓';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--dark-bg);
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.forgot-password {
+    color: var(--primary-turquoise);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color var(--transition-fast);
+}
+
+.forgot-password:hover {
+    color: var(--primary-teal);
+}
+
 /* Submit Button */
 .submit-btn {
     width: 100%;
@@ -338,7 +420,7 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all var(--transition-normal);
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
 }
 
 .submit-btn:hover {
@@ -357,27 +439,10 @@ body {
     transform: none;
 }
 
-/* Form Links */
-.form-links {
-    text-align: center;
-    margin-top: 1.5rem;
-}
-
-.form-links a {
-    color: var(--primary-turquoise);
-    text-decoration: none;
-    font-size: 0.9rem;
-    transition: color var(--transition-fast);
-}
-
-.form-links a:hover {
-    color: var(--primary-teal);
-}
-
-/* Toggle between Login/Register */
+/* Form Toggle */
 .form-toggle {
     text-align: center;
-    margin-top: 2rem;
+    margin-top: 1.5rem;
     padding-top: 1.5rem;
     border-top: 1px solid var(--glass-border);
 }
@@ -396,9 +461,21 @@ body {
     cursor: pointer;
     text-decoration: underline;
     transition: color var(--transition-fast);
+    padding: 0.5rem;
 }
 
 .toggle-btn:hover {
+    color: var(--primary-teal);
+}
+
+/* Links in Text */
+.link {
+    color: var(--primary-turquoise);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.link:hover {
     color: var(--primary-teal);
 }
 
@@ -430,9 +507,28 @@ body {
     display: block;
 }
 
+.general-error, .general-success {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.general-error {
+    background: rgba(248, 79, 68, 0.1);
+    border: 1px solid var(--secondary-red);
+    color: var(--secondary-red);
+}
+
+.general-success {
+    background: rgba(68, 237, 248, 0.1);
+    border: 1px solid var(--primary-turquoise);
+    color: var(--primary-turquoise);
+}
+
 /* Hidden class for form switching */
 .hidden {
-    display: none;
+    display: none !important;
 }
 
 /* ========================================
@@ -461,6 +557,10 @@ body {
     .features {
         display: none;
     }
+    
+    .auth-form {
+        padding: 2rem;
+    }
 }
 
 @media (max-width: 640px) {
@@ -469,7 +569,7 @@ body {
     }
     
     .auth-form {
-        padding: 2rem;
+        padding: 1.5rem;
     }
     
     .logo {
@@ -478,5 +578,19 @@ body {
     
     .tagline {
         font-size: 1rem;
+    }
+    
+    .input-row {
+        flex-direction: column;
+        gap: 0;
+    }
+    
+    .input-row .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-options {
+        flex-direction: column;
+        align-items: flex-start;
     }
 }

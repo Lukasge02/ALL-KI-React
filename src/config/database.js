@@ -1,3 +1,9 @@
+/**
+ * 🔧 DATABASE CONFIG FIX - MongoDB Connection
+ * Ort: src/config/database.js
+ * Problem: bufferMaxEntries Option ist veraltet
+ */
+
 const mongoose = require('mongoose');
 
 class DatabaseManager {
@@ -8,7 +14,7 @@ class DatabaseManager {
         this.maxRetryAttempts = 5;
         this.retryDelay = 5000; // 5 seconds
         
-        // MongoDB connection configuration
+        // MongoDB connection configuration - AKTUALISIERT
         this.mongoConfig = {
             useNewUrlParser: true,
             useUnifiedTopology: true,
@@ -17,7 +23,7 @@ class DatabaseManager {
             maxPoolSize: 10, // Maintain up to 10 socket connections
             minPoolSize: 5, // Maintain a minimum of 5 socket connections
             maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
-            bufferMaxEntries: 0 // Disable mongoose buffering
+            // bufferMaxEntries: 0 <- DIESE ZEILE ENTFERNT (veraltet)
         };
         
         console.log('🗄️ DatabaseManager initialisiert');
@@ -204,179 +210,49 @@ class DatabaseManager {
         }
     }
 
-    // Get database statistics
+    // Get database stats
     async getStats() {
         try {
             if (!this.isConnected) {
-                return { error: 'Not connected to database' };
+                return {
+                    status: 'disconnected',
+                    collections: [],
+                    totalDocuments: 0
+                };
             }
 
-            // Import models - only when needed to avoid circular dependencies
-            const User = require('../models/User');
-            const Profile = require('../models/Profile');
-            const Chat = require('../models/Chat');
-
-            // Parallel queries for better performance
-            const [
-                userCount,
-                profileCount,
-                chatCount,
-                recentUsers,
-                recentProfiles,
-                recentChats
-            ] = await Promise.all([
-                User.countDocuments(),
-                Profile.countDocuments(),
-                Chat.countDocuments(),
-                User.countDocuments({
-                    'stats.lastActive': { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-                }),
-                Profile.countDocuments({
-                    'stats.lastUsed': { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-                }),
-                Chat.countDocuments({
-                    'stats.lastActivity': { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-                })
-            ]);
-
-            // Database size and collection stats
-            const dbStats = await mongoose.connection.db.stats();
+            const db = mongoose.connection.db;
+            const collections = await db.listCollections().toArray();
             
+            const stats = {
+                status: 'connected',
+                collections: collections.map(c => c.name),
+                totalCollections: collections.length,
+                totalDocuments: 0
+            };
+
+            // Count documents in each collection
+            for (const collection of collections) {
+                try {
+                    const count = await db.collection(collection.name).countDocuments();
+                    stats.totalDocuments += count;
+                } catch (error) {
+                    console.warn(`Could not count documents in ${collection.name}:`, error.message);
+                }
+            }
+
+            return stats;
+        } catch (error) {
             return {
-                users: {
-                    total: userCount,
-                    active24h: recentUsers
-                },
-                profiles: {
-                    total: profileCount,
-                    active24h: recentProfiles,
-                    avgPerUser: userCount > 0 ? (profileCount / userCount).toFixed(2) : 0
-                },
-                chats: {
-                    total: chatCount,
-                    active24h: recentChats
-                },
-                database: {
-                    name: dbStats.db,
-                    collections: dbStats.collections,
-                    documents: dbStats.objects,
-                    avgObjSize: Math.round(dbStats.avgObjSize || 0),
-                    dataSize: Math.round((dbStats.dataSize || 0) / 1024 / 1024), // MB
-                    storageSize: Math.round((dbStats.storageSize || 0) / 1024 / 1024), // MB
-                    indexes: dbStats.indexes,
-                    indexSize: Math.round((dbStats.indexSize || 0) / 1024 / 1024) // MB
-                },
-                connection: this.getConnectionStatus(),
-                performance: {
-                    connectionAttempts: this.connectionAttempts,
-                    uptime: Math.round(process.uptime()),
-                    memoryUsage: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) // MB
-                }
-            };
-        } catch (error) {
-            console.error('Database stats error:', error);
-            return { 
+                status: 'error',
                 error: error.message,
-                connection: this.getConnectionStatus()
+                collections: [],
+                totalDocuments: 0
             };
-        }
-    }
-
-    // Advanced database operations
-    async createIndexes() {
-        try {
-            if (!this.isConnected) {
-                console.log('⚠️ Keine Datenbankverbindung - Indexes können nicht erstellt werden');
-                return false;
-            }
-
-            console.log('🏗️ Erstelle Database-Indexes...');
-            
-            // Import models
-            const User = require('../models/User');
-            const Profile = require('../models/Profile');
-            const Chat = require('../models/Chat');
-
-            // Create indexes for all models
-            await Promise.all([
-                User.createIndexes(),
-                Profile.createIndexes(),
-                Chat.createIndexes()
-            ]);
-
-            console.log('✅ Database-Indexes erfolgreich erstellt');
-            return true;
-        } catch (error) {
-            console.error('❌ Fehler beim Erstellen der Indexes:', error);
-            return false;
-        }
-    }
-
-    // Cleanup old data
-    async cleanup() {
-        try {
-            if (!this.isConnected) {
-                console.log('⚠️ Keine Datenbankverbindung für Cleanup');
-                return false;
-            }
-
-            console.log('🧹 Starte Database Cleanup...');
-            
-            const Chat = require('../models/Chat');
-            
-            // Archive old chats (older than retention period)
-            const oldChats = await Chat.updateMany(
-                {
-                    'stats.lastActivity': { 
-                        $lt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // 90 days
-                    },
-                    status: 'active'
-                },
-                {
-                    $set: { 
-                        status: 'archived',
-                        'archival.isArchived': true,
-                        'archival.archivedAt': new Date()
-                    }
-                }
-            );
-
-            console.log(`🗂️ ${oldChats.modifiedCount} alte Chats archiviert`);
-            
-            // Remove very old archived chats (older than 1 year)
-            const deletedChats = await Chat.deleteMany({
-                'archival.isArchived': true,
-                'archival.archivedAt': { 
-                    $lt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000) // 1 year
-                }
-            });
-
-            console.log(`🗑️ ${deletedChats.deletedCount} sehr alte Chats gelöscht`);
-            console.log('✅ Database Cleanup abgeschlossen');
-            
-            return true;
-        } catch (error) {
-            console.error('❌ Fehler beim Database Cleanup:', error);
-            return false;
         }
     }
 }
 
-// Create and export singleton instance
-const databaseManager = new DatabaseManager();
-
-// Auto-create indexes on startup (with delay to allow connection)
-setTimeout(async () => {
-    if (databaseManager.isConnected) {
-        await databaseManager.createIndexes();
-    }
-}, 5000);
-
-// Schedule cleanup every 24 hours
-setInterval(async () => {
-    if (databaseManager.isConnected) {
-        await databaseManager.cleanup();
-    }
-}, 24 * 60 * 60 * 1000); // 24 hours
-
-module.exports = databaseManager;
+// Export singleton instance
+const database = new DatabaseManager();
+module.exports = database;
