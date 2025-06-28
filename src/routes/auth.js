@@ -1,43 +1,101 @@
+/**
+ * 🔐 AUTH ROUTES MIT BCRYPT DEBUG
+ * ERSETZEN IN: src/routes/auth.js
+ */
+
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
 const User = require('../models/User');
 const database = require('../config/database');
 
+console.log('✅ Auth routes: Setting up with debug...');
+
 // Fallback-Speicher für den Fall, dass MongoDB nicht verfügbar ist
 const fallbackUsers = [];
 
-// Register Route
+// ========================================
+// REGISTER ROUTE MIT DEBUG
+// ========================================
 router.post('/register', async (req, res) => {
     try {
-        const { firstName, lastName, email, password, acceptNewsletter } = req.body;
+        const { firstName, lastName, email, password, confirmPassword } = req.body;
 
-        console.log('Register attempt:', { firstName, lastName, email, acceptNewsletter });
+        console.log('📝 Register attempt:', { 
+            firstName, 
+            lastName, 
+            email, 
+            passwordLength: password?.length,
+            confirmPasswordLength: confirmPassword?.length,
+            passwordsMatch: password === confirmPassword
+        });
 
-        // Validierung
+        // DETAILED Backend Validation
         if (!firstName || !lastName || !email || !password) {
+            console.log('❌ Missing required fields');
             return res.status(400).json({ 
                 error: 'Alle Felder sind erforderlich' 
             });
         }
 
+        // Password confirmation check (optional - frontend should handle this)
+        if (confirmPassword && password !== confirmPassword) {
+            console.log('❌ Backend password mismatch detected');
+            console.log(`   Password: "${password}" (${password.length} chars)`);
+            console.log(`   Confirm:  "${confirmPassword}" (${confirmPassword.length} chars)`);
+            return res.status(400).json({ 
+                error: 'Passwörter stimmen nicht überein' 
+            });
+        }
+
+        if (password.length < 6) {
+            console.log('❌ Password too short:', password.length);
+            return res.status(400).json({ 
+                error: 'Passwort muss mindestens 6 Zeichen haben' 
+            });
+        }
+
         // Check if database is connected
         if (!database.isConnected) {
-            console.log('Database not connected, using fallback storage');
+            console.log('⚠️ Database not connected, using fallback storage');
             return handleRegistrationFallback(req, res);
         }
 
         // Prüfen ob User bereits existiert
         const existingUser = await User.findOne({ email: email.toLowerCase() });
         if (existingUser) {
+            console.log('❌ User already exists:', email);
             return res.status(409).json({ 
                 error: 'Ein Benutzer mit dieser E-Mail existiert bereits' 
             });
         }
 
-        // Passwort hashen
+        // BCRYPT DEBUG
+        console.log('🔐 Starting bcrypt hashing...');
+        console.log(`   Original password: "${password}" (${password.length} chars)`);
+        
         const saltRounds = 12;
+        console.log(`   Salt rounds: ${saltRounds}`);
+        
+        const startTime = Date.now();
         const hashedPassword = await bcrypt.hash(password, saltRounds);
+        const hashTime = Date.now() - startTime;
+        
+        console.log(`✅ Bcrypt hashing completed in ${hashTime}ms`);
+        console.log(`   Hashed password: ${hashedPassword.substring(0, 20)}...`);
+        console.log(`   Hash length: ${hashedPassword.length} chars`);
+
+        // VERIFICATION TEST
+        console.log('🔍 Testing bcrypt verification immediately...');
+        const verifyTest = await bcrypt.compare(password, hashedPassword);
+        console.log(`   Immediate verification test: ${verifyTest ? '✅ PASS' : '❌ FAIL'}`);
+        
+        if (!verifyTest) {
+            console.error('🚨 CRITICAL: bcrypt verification failed immediately after hashing!');
+            return res.status(500).json({ 
+                error: 'Passwort-Verschlüsselung fehlgeschlagen' 
+            });
+        }
 
         // Neuen User erstellen
         const newUser = new User({
@@ -48,15 +106,21 @@ router.post('/register', async (req, res) => {
             preferences: {
                 theme: 'dark',
                 language: 'de',
-                notifications: acceptNewsletter || false,
+                notifications: false,
                 aiModel: 'gpt-3.5-turbo'
             }
         });
 
-        // User in MongoDB speichern
+        console.log('💾 Saving user to MongoDB...');
         const savedUser = await newUser.save();
+        console.log('✅ User saved with ID:', savedUser._id);
 
-        console.log('User registered successfully in MongoDB:', email);
+        // FINAL VERIFICATION TEST
+        console.log('🔍 Final verification test with saved user...');
+        const finalTest = await bcrypt.compare(password, savedUser.password);
+        console.log(`   Final verification test: ${finalTest ? '✅ PASS' : '❌ FAIL'}`);
+
+        console.log('✅ User registered successfully in MongoDB:', email);
 
         // Erfolgreiche Registrierung
         res.status(201).json({
@@ -66,12 +130,12 @@ router.post('/register', async (req, res) => {
             user: {
                 id: savedUser._id,
                 email: savedUser.email,
-                name: savedUser.fullName
+                name: savedUser.fullName || `${savedUser.firstName} ${savedUser.lastName}`
             }
         });
 
     } catch (error) {
-        console.error('Register error:', error);
+        console.error('❌ Register error:', error);
         
         // MongoDB-spezifische Fehler behandeln
         if (error.code === 11000) {
@@ -80,19 +144,26 @@ router.post('/register', async (req, res) => {
             });
         }
         
-        res.status(500).json({ error: 'Server-Fehler bei der Registrierung' });
+        res.status(500).json({ error: 'Server-Fehler bei der Registrierung: ' + error.message });
     }
 });
 
-// Login Route
+// ========================================
+// LOGIN ROUTE MIT DEBUG
+// ========================================
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        console.log('Login attempt:', { email, password: '***' });
+        console.log('🔑 Login attempt:', { 
+            email, 
+            passwordLength: password?.length,
+            passwordPreview: password?.substring(0, 3) + '***'
+        });
 
         // Validierung
         if (!email || !password) {
+            console.log('❌ Missing email or password');
             return res.status(400).json({ 
                 error: 'E-Mail und Passwort sind erforderlich' 
             });
@@ -100,60 +171,89 @@ router.post('/login', async (req, res) => {
 
         // Check if database is connected
         if (!database.isConnected) {
-            console.log('Database not connected, using fallback storage');
+            console.log('⚠️ Database not connected, using fallback storage');
             return handleLoginFallback(req, res);
         }
 
         // User suchen
+        console.log('🔍 Searching for user:', email);
         const user = await User.findOne({ email: email.toLowerCase() });
 
         if (!user) {
+            console.log('❌ User not found:', email);
             return res.status(401).json({ 
                 error: 'Ungültige Anmeldedaten' 
             });
         }
 
-        // Passwort überprüfen
+        console.log('✅ User found:', {
+            id: user._id,
+            email: user.email,
+            hasPassword: !!user.password,
+            passwordLength: user.password?.length,
+            passwordPreview: user.password?.substring(0, 20) + '...'
+        });
+
+        // BCRYPT VERIFICATION DEBUG
+        console.log('🔐 Starting bcrypt verification...');
+        console.log(`   Input password: "${password}" (${password.length} chars)`);
+        console.log(`   Stored hash: ${user.password.substring(0, 20)}... (${user.password.length} chars)`);
+        
+        const startTime = Date.now();
         const isPasswordValid = await bcrypt.compare(password, user.password);
+        const verifyTime = Date.now() - startTime;
+        
+        console.log(`🔍 Bcrypt verification completed in ${verifyTime}ms`);
+        console.log(`   Result: ${isPasswordValid ? '✅ VALID' : '❌ INVALID'}`);
         
         if (!isPasswordValid) {
+            console.log('❌ Password verification failed for user:', email);
+            
+            // EXTRA DEBUG: Manual character comparison
+            console.log('🔍 Debug info:');
+            console.log(`   Input chars: ${password.split('').map(c => c.charCodeAt(0)).join(',')}`);
+            console.log(`   Input length: ${password.length}`);
+            console.log(`   Hash format looks valid: ${user.password.startsWith('$2')}`);
+            
             return res.status(401).json({ 
                 error: 'Ungültige Anmeldedaten' 
             });
         }
 
-        // Letzten Login aktualisieren
-        if (user.stats) {
-            user.stats.lastActive = new Date();
-        } else {
-            user.stats = { lastActive: new Date() };
-        }
-        await user.save();
-
-        console.log('Login successful for:', email);
+        console.log('✅ Password verification successful for user:', email);
 
         // Erfolgreiche Anmeldung
-        res.json({
+        const loginResponse = {
             success: true,
             message: 'Erfolgreich angemeldet',
-            token: 'jwt-token-' + Date.now(), // In Produktion: echtes JWT verwenden
+            token: 'jwt-token-' + Date.now(),
             user: {
                 id: user._id,
                 email: user.email,
-                name: user.fullName,
-                preferences: user.preferences
+                name: user.fullName || `${user.firstName} ${user.lastName}`,
+                firstName: user.firstName,
+                lastName: user.lastName
             }
-        });
+        };
+
+        console.log('✅ Login successful for:', email);
+        console.log('📤 Sending response:', { ...loginResponse, token: 'jwt-token-***' });
+
+        res.json(loginResponse);
 
     } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ error: 'Server-Fehler beim Anmelden' });
+        console.error('❌ Login error:', error);
+        res.status(500).json({ error: 'Server-Fehler beim Anmelden: ' + error.message });
     }
 });
 
-// Fallback-Funktionen für den Fall, dass MongoDB nicht verbunden ist
+// ========================================
+// FALLBACK FUNCTIONS (simplified)
+// ========================================
 function handleRegistrationFallback(req, res) {
-    const { firstName, lastName, email, password, acceptNewsletter } = req.body;
+    const { firstName, lastName, email, password } = req.body;
+    
+    console.log('📝 Fallback registration for:', email);
     
     // Prüfen ob User bereits existiert
     const existingUser = fallbackUsers.find(u => u.email === email.toLowerCase());
@@ -163,25 +263,21 @@ function handleRegistrationFallback(req, res) {
         });
     }
 
-    // Neuen User erstellen
+    // Neuen User erstellen (OHNE bcrypt für Fallback)
     const newUser = {
         id: Date.now().toString(),
         firstName,
         lastName,
         name: `${firstName} ${lastName}`,
         email: email.toLowerCase(),
-        password, // In echter Anwendung: gehashed speichern!
-        acceptNewsletter: acceptNewsletter || false,
+        password, // Plain text in fallback mode!
         createdAt: new Date()
     };
 
-    // User speichern (Fallback-Array)
     fallbackUsers.push(newUser);
 
-    console.log('User registered successfully (fallback):', email);
-    console.log('Total users now:', fallbackUsers.length);
+    console.log('✅ User registered successfully (fallback):', email);
 
-    // Erfolgreiche Registrierung
     res.status(201).json({
         success: true,
         message: 'Erfolgreich registriert (Fallback-Modus)',
@@ -197,18 +293,22 @@ function handleRegistrationFallback(req, res) {
 function handleLoginFallback(req, res) {
     const { email, password } = req.body;
     
-    // User suchen (Fallback-Array)
-    const user = fallbackUsers.find(u => u.email === email.toLowerCase() && u.password === password);
+    console.log('🔑 Fallback login for:', email);
+    
+    // User suchen (Plain text comparison in fallback)
+    const user = fallbackUsers.find(u => 
+        u.email === email.toLowerCase() && u.password === password
+    );
 
     if (!user) {
+        console.log('❌ Fallback login failed for:', email);
         return res.status(401).json({ 
             error: 'Ungültige Anmeldedaten' 
         });
     }
 
-    console.log('Login successful (fallback) for:', email);
+    console.log('✅ Fallback login successful for:', email);
 
-    // Erfolgreiche Anmeldung
     res.json({
         success: true,
         message: 'Erfolgreich angemeldet (Fallback-Modus)',
@@ -221,10 +321,55 @@ function handleLoginFallback(req, res) {
     });
 }
 
-// Status Route
+// ========================================
+// UTILITY ROUTES
+// ========================================
+router.get('/debug', async (req, res) => {
+    if (process.env.NODE_ENV !== 'development') {
+        return res.status(403).json({ error: 'Nur in Development verfügbar' });
+    }
+    
+    try {
+        let userCount = 0;
+        let users = [];
+        
+        if (database.isConnected) {
+            userCount = await User.countDocuments();
+            users = await User.find({}, 'firstName lastName email createdAt').limit(5).lean();
+        } else {
+            userCount = fallbackUsers.length;
+            users = fallbackUsers.slice(0, 5);
+        }
+        
+        res.json({
+            database: {
+                connected: database.isConnected,
+                type: database.isConnected ? 'MongoDB' : 'Fallback Array'
+            },
+            users: {
+                total: userCount,
+                sample: users.map(u => ({
+                    id: u._id || u.id,
+                    name: u.fullName || u.name || `${u.firstName} ${u.lastName}`,
+                    email: u.email,
+                    hasPassword: !!u.password,
+                    passwordLength: u.password?.length,
+                    createdAt: u.createdAt
+                }))
+            },
+            bcrypt: {
+                version: require('bcryptjs/package.json').version,
+                test: await bcrypt.compare('test123', await bcrypt.hash('test123', 12))
+            },
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.get('/status', async (req, res) => {
     try {
-        const dbStatus = database.getConnectionStatus();
         let userCount = 0;
         
         if (database.isConnected) {
@@ -235,10 +380,8 @@ router.get('/status', async (req, res) => {
         
         res.json({
             database: {
-                connected: dbStatus.isConnected,
-                status: dbStatus.readyState,
-                host: dbStatus.host,
-                name: dbStatus.name
+                connected: database.isConnected,
+                status: database.isConnected ? 'connected' : 'disconnected'
             },
             users: {
                 total: userCount,
@@ -251,7 +394,6 @@ router.get('/status', async (req, res) => {
     }
 });
 
-// Logout Route
 router.post('/logout', (req, res) => {
     res.json({
         success: true,
@@ -259,40 +401,6 @@ router.post('/logout', (req, res) => {
     });
 });
 
-// Test Route - alle User anzeigen (nur für Development!)
-router.get('/users', async (req, res) => {
-    if (process.env.NODE_ENV !== 'development') {
-        return res.status(403).json({ error: 'Nur in Development verfügbar' });
-    }
-    
-    try {
-        let users = [];
-        
-        if (database.isConnected) {
-            const mongoUsers = await User.find({}, 'firstName lastName email createdAt').lean();
-            users = mongoUsers.map(u => ({
-                id: u._id,
-                name: `${u.firstName} ${u.lastName}`,
-                email: u.email,
-                createdAt: u.createdAt
-            }));
-        } else {
-            users = fallbackUsers.map(u => ({
-                id: u.id,
-                name: u.name,
-                email: u.email,
-                createdAt: u.createdAt
-            }));
-        }
-        
-        res.json({
-            users: users,
-            total: users.length,
-            storage: database.isConnected ? 'MongoDB' : 'Fallback Array'
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+console.log('✅ Auth routes: All routes configured with debug');
 
 module.exports = router;

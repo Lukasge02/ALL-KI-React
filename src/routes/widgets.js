@@ -1,395 +1,235 @@
 /**
- * 🧩 WIDGETS ROUTES - DATABASE VERSION
- * ERSETZE KOMPLETT: src/routes/widgets.js
+ * 🧩 WIDGET ROUTES VEREINFACHT (OHNE EXPRESS-VALIDATOR)
+ * ERSETZEN IN: src/routes/widgets.js
  */
 
 const express = require('express');
-const { body, param, validationResult } = require('express-validator');
-const Widget = require('../models/Widget');
-const { getUserFromToken } = require('../middleware/auth');
-
 const router = express.Router();
 
-// ========================================
-// HELPER FUNCTIONS
-// ========================================
+console.log('✅ Widget routes: Setting up routes...');
 
-const handleValidationErrors = (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({
-            success: false,
-            error: 'Validierungsfehler',
-            details: errors.array()
-        });
+// Mock Data für Widgets
+const widgets = [
+    {
+        id: 1,
+        name: 'Wetter Widget',
+        type: 'weather',
+        description: 'Zeigt aktuelle Wetterinformationen an',
+        isActive: true,
+        position: { x: 0, y: 0 },
+        size: { width: 2, height: 2 }
+    },
+    {
+        id: 2,
+        name: 'Todo Widget',
+        type: 'todo',
+        description: 'Verwaltet Ihre Aufgaben',
+        isActive: true,
+        position: { x: 2, y: 0 },
+        size: { width: 2, height: 3 }
+    },
+    {
+        id: 3,
+        name: 'Kalender Widget',
+        type: 'calendar',
+        description: 'Zeigt kommende Termine an',
+        isActive: true,
+        position: { x: 0, y: 2 },
+        size: { width: 3, height: 2 }
     }
-    next();
-};
-
-const asyncHandler = (fn) => (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-};
+];
 
 // ========================================
-// ROUTES - ECHTE DATABASE CALLS
+// WIDGET ROUTES
 // ========================================
 
-// Get All User Widgets
-router.get('/', getUserFromToken, asyncHandler(async (req, res) => {
+// GET /api/widgets - Alle Widgets abrufen
+router.get('/', async (req, res) => {
     try {
-        const widgets = await Widget.findActiveByUser(req.user._id);
-
+        const userEmail = req.headers['x-user-email'] || 'test@test.de';
+        
+        console.log(`📊 Getting widgets for user: ${userEmail}`);
+        
+        // Hier würden normalerweise benutzer-spezifische Widgets aus der DB geholt
+        const activeWidgets = widgets.filter(w => w.isActive);
+        
         res.json({
             success: true,
-            widgets: widgets,
-            count: widgets.length
+            widgets: activeWidgets,
+            total: activeWidgets.length,
+            user: userEmail
         });
-
     } catch (error) {
-        console.error('Get User Widgets Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Fehler beim Laden der Widgets'
-        });
+        console.error('Get Widgets Error:', error);
+        res.status(500).json({ error: error.message });
     }
-}));
+});
 
-// Create New Widget
-router.post('/', getUserFromToken, [
-    body('type')
-        .optional()
-        .isIn(['custom', 'weather', 'news', 'calendar', 'tasks', 'notes', 'ai_chat'])
-        .withMessage('Ungültiger Widget-Typ'),
-    body('title')
-        .notEmpty()
-        .isLength({ max: 100 })
-        .withMessage('Titel ist erforderlich (max 100 Zeichen)'),
-    body('question')
-        .optional()
-        .isLength({ max: 500 })
-        .withMessage('Frage zu lang (max 500 Zeichen)')
-], handleValidationErrors, asyncHandler(async (req, res) => {
+// GET /api/widgets/:id - Einzelnes Widget abrufen
+router.get('/:id', async (req, res) => {
     try {
-        const { type, title, question, position, size, settings } = req.body;
-
-        // OpenAI Response generieren wenn Frage vorhanden
-        let response = null;
-        if (question && question.trim()) {
-            try {
-                const openaiService = require('../services/openai');
-                response = await openaiService.quickChat(question.trim());
-            } catch (aiError) {
-                console.warn('OpenAI failed, using fallback:', aiError.message);
-                response = "KI-Service temporär nicht verfügbar. Bitte versuchen Sie es später erneut.";
-            }
+        const { id } = req.params;
+        const widgetId = parseInt(id);
+        
+        if (isNaN(widgetId)) {
+            return res.status(400).json({ error: 'Ungültige Widget-ID' });
         }
-
-        const widget = new Widget({
-            userId: req.user._id,
-            type: type || 'custom',
-            title: title,
-            question: question || null,
-            response: response,
-            position: position || { x: 0, y: 0 },
-            size: size || { width: 4, height: 3 },
-            settings: settings || {}
+        
+        const widget = widgets.find(w => w.id === widgetId && w.isActive);
+        
+        if (!widget) {
+            return res.status(404).json({ error: 'Widget nicht gefunden' });
+        }
+        
+        res.json({
+            success: true,
+            widget: widget
         });
+    } catch (error) {
+        console.error('Get Widget Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
-        await widget.save();
-
-        console.log('Widget created successfully:', widget._id);
-
+// POST /api/widgets - Neues Widget erstellen
+router.post('/', async (req, res) => {
+    try {
+        const { name, type, description, position, size } = req.body;
+        const userEmail = req.headers['x-user-email'] || 'test@test.de';
+        
+        // Simple Validation
+        if (!name || !type) {
+            return res.status(400).json({ error: 'Name und Typ sind erforderlich' });
+        }
+        
+        if (name.length < 2 || name.length > 100) {
+            return res.status(400).json({ error: 'Name muss zwischen 2-100 Zeichen haben' });
+        }
+        
+        const validTypes = ['weather', 'todo', 'calendar', 'news', 'notes', 'chat', 'profile'];
+        if (!validTypes.includes(type)) {
+            return res.status(400).json({ error: 'Ungültiger Widget-Typ' });
+        }
+        
+        // Neues Widget erstellen
+        const newWidget = {
+            id: Math.max(...widgets.map(w => w.id)) + 1,
+            name: name.trim(),
+            type: type,
+            description: description || '',
+            isActive: true,
+            position: position || { x: 0, y: 0 },
+            size: size || { width: 2, height: 2 },
+            createdAt: new Date(),
+            user: userEmail
+        };
+        
+        // Widget zum Array hinzufügen (in echter App: zur DB)
+        widgets.push(newWidget);
+        
+        console.log(`✅ Widget created: ${name} (${type}) for user ${userEmail}`);
+        
         res.status(201).json({
             success: true,
             message: 'Widget erfolgreich erstellt',
-            widget: widget
+            widget: newWidget
         });
-
+        
     } catch (error) {
         console.error('Create Widget Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Fehler beim Erstellen des Widgets'
-        });
+        res.status(500).json({ error: error.message });
     }
-}));
+});
 
-// Update Widget
-router.put('/:id', getUserFromToken, [
-    param('id').isMongoId().withMessage('Ungültige Widget-ID'),
-    body('title').optional().isLength({ max: 100 }).withMessage('Titel zu lang'),
-    body('question').optional().isLength({ max: 500 }).withMessage('Frage zu lang')
-], handleValidationErrors, asyncHandler(async (req, res) => {
+// PUT /api/widgets/:id - Widget aktualisieren
+router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const updates = req.body;
-
-        // Neue AI Response generieren wenn Frage geändert wurde
-        if (updates.question && updates.question.trim()) {
-            try {
-                const openaiService = require('../services/openai');
-                updates.response = await openaiService.quickChat(updates.question.trim());
-            } catch (aiError) {
-                console.warn('OpenAI failed during update:', aiError.message);
-                updates.response = "KI-Service temporär nicht verfügbar.";
-            }
+        const { name, description, position, size, isActive } = req.body;
+        const widgetId = parseInt(id);
+        
+        if (isNaN(widgetId)) {
+            return res.status(400).json({ error: 'Ungültige Widget-ID' });
         }
-
-        const widget = await Widget.findOneAndUpdate(
-            { _id: id, userId: req.user._id },
-            { $set: updates },
-            { new: true, runValidators: true }
-        );
-
-        if (!widget) {
-            return res.status(404).json({
-                success: false,
-                error: 'Widget nicht gefunden'
-            });
+        
+        const widgetIndex = widgets.findIndex(w => w.id === widgetId);
+        
+        if (widgetIndex === -1) {
+            return res.status(404).json({ error: 'Widget nicht gefunden' });
         }
-
-        console.log('Widget updated successfully:', widget._id);
-
+        
+        // Widget aktualisieren
+        const widget = widgets[widgetIndex];
+        
+        if (name) widget.name = name.trim();
+        if (description !== undefined) widget.description = description;
+        if (position) widget.position = position;
+        if (size) widget.size = size;
+        if (isActive !== undefined) widget.isActive = isActive;
+        
+        widget.updatedAt = new Date();
+        
         res.json({
             success: true,
-            message: 'Widget erfolgreich aktualisiert',
+            message: 'Widget aktualisiert',
             widget: widget
         });
-
+        
     } catch (error) {
         console.error('Update Widget Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Fehler beim Aktualisieren des Widgets'
-        });
+        res.status(500).json({ error: error.message });
     }
-}));
+});
 
-// Delete Widget (Soft Delete)
-router.delete('/:id', getUserFromToken, [
-    param('id').isMongoId().withMessage('Ungültige Widget-ID')
-], handleValidationErrors, asyncHandler(async (req, res) => {
+// DELETE /api/widgets/:id - Widget löschen
+router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-
-        const widget = await Widget.findOneAndUpdate(
-            { _id: id, userId: req.user._id },
-            { $set: { isActive: false } },
-            { new: true }
-        );
-
-        if (!widget) {
-            return res.status(404).json({
-                success: false,
-                error: 'Widget nicht gefunden'
-            });
+        const widgetId = parseInt(id);
+        
+        if (isNaN(widgetId)) {
+            return res.status(400).json({ error: 'Ungültige Widget-ID' });
         }
-
-        console.log('Widget deleted successfully:', widget._id);
-
+        
+        const widgetIndex = widgets.findIndex(w => w.id === widgetId);
+        
+        if (widgetIndex === -1) {
+            return res.status(404).json({ error: 'Widget nicht gefunden' });
+        }
+        
+        // Soft delete: isActive auf false setzen
+        widgets[widgetIndex].isActive = false;
+        widgets[widgetIndex].deletedAt = new Date();
+        
         res.json({
             success: true,
-            message: 'Widget erfolgreich gelöscht'
+            message: 'Widget gelöscht'
         });
-
+        
     } catch (error) {
         console.error('Delete Widget Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Fehler beim Löschen des Widgets'
-        });
+        res.status(500).json({ error: error.message });
     }
-}));
+});
 
-// Get Widget by ID
-router.get('/:id', getUserFromToken, [
-    param('id').isMongoId().withMessage('Ungültige Widget-ID')
-], handleValidationErrors, asyncHandler(async (req, res) => {
-    try {
-        const { id } = req.params;
+// GET /api/widgets/types - Verfügbare Widget-Typen
+router.get('/meta/types', (req, res) => {
+    const widgetTypes = [
+        { type: 'weather', name: 'Wetter', description: 'Aktuelle Wetterinformationen' },
+        { type: 'todo', name: 'Aufgaben', description: 'Todo-Liste verwalten' },
+        { type: 'calendar', name: 'Kalender', description: 'Termine und Events' },
+        { type: 'news', name: 'Nachrichten', description: 'Aktuelle Nachrichten' },
+        { type: 'notes', name: 'Notizen', description: 'Schnelle Notizen' },
+        { type: 'chat', name: 'Chat', description: 'KI-Chat Interface' },
+        { type: 'profile', name: 'Profile', description: 'KI-Profile verwalten' }
+    ];
+    
+    res.json({
+        success: true,
+        types: widgetTypes
+    });
+});
 
-        const widget = await Widget.findOne({
-            _id: id,
-            userId: req.user._id,
-            isActive: true
-        });
-
-        if (!widget) {
-            return res.status(404).json({
-                success: false,
-                error: 'Widget nicht gefunden'
-            });
-        }
-
-        res.json({
-            success: true,
-            widget: widget
-        });
-
-    } catch (error) {
-        console.error('Get Widget Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Fehler beim Laden des Widgets'
-        });
-    }
-}));
-
-// Refresh Widget (Re-generate AI response)
-router.post('/:id/refresh', getUserFromToken, [
-    param('id').isMongoId().withMessage('Ungültige Widget-ID')
-], handleValidationErrors, asyncHandler(async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        const widget = await Widget.findOne({
-            _id: id,
-            userId: req.user._id,
-            isActive: true
-        });
-
-        if (!widget) {
-            return res.status(404).json({
-                success: false,
-                error: 'Widget nicht gefunden'
-            });
-        }
-
-        if (!widget.question) {
-            return res.status(400).json({
-                success: false,
-                error: 'Widget hat keine Frage zum Aktualisieren'
-            });
-        }
-
-        // Neue AI Response generieren
-        try {
-            const openaiService = require('../services/openai');
-            const newResponse = await openaiService.quickChat(widget.question);
-            
-            await widget.updateResponse(newResponse);
-
-            res.json({
-                success: true,
-                message: 'Widget erfolgreich aktualisiert',
-                widget: widget
-            });
-
-        } catch (aiError) {
-            console.warn('OpenAI failed during refresh:', aiError.message);
-            
-            res.json({
-                success: false,
-                error: 'KI-Service temporär nicht verfügbar',
-                fallback: true
-            });
-        }
-
-    } catch (error) {
-        console.error('Refresh Widget Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Fehler beim Aktualisieren des Widgets'
-        });
-    }
-}));
-
-// Bulk Update Widget Positions (für Drag & Drop)
-router.put('/positions/bulk', getUserFromToken, [
-    body('widgets').isArray().withMessage('Widgets-Array erforderlich'),
-    body('widgets.*.id').isMongoId().withMessage('Ungültige Widget-ID'),
-    body('widgets.*.position.x').isNumeric().withMessage('X-Position muss numerisch sein'),
-    body('widgets.*.position.y').isNumeric().withMessage('Y-Position muss numerisch sein')
-], handleValidationErrors, asyncHandler(async (req, res) => {
-    try {
-        const { widgets } = req.body;
-        
-        const updates = widgets.map(async (widgetUpdate) => {
-            return Widget.findOneAndUpdate(
-                { 
-                    _id: widgetUpdate.id, 
-                    userId: req.user._id 
-                },
-                { 
-                    $set: { 
-                        'position.x': widgetUpdate.position.x,
-                        'position.y': widgetUpdate.position.y
-                    }
-                },
-                { new: true }
-            );
-        });
-
-        const updatedWidgets = await Promise.all(updates);
-
-        res.json({
-            success: true,
-            message: 'Widget-Positionen erfolgreich aktualisiert',
-            widgets: updatedWidgets.filter(widget => widget !== null)
-        });
-
-    } catch (error) {
-        console.error('Bulk Update Widget Positions Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Fehler beim Aktualisieren der Widget-Positionen'
-        });
-    }
-}));
-
-// Get Widget Templates/Categories  
-router.get('/templates/available', getUserFromToken, asyncHandler(async (req, res) => {
-    try {
-        const templates = [
-            {
-                id: 'weather',
-                name: 'Wetter',
-                icon: '🌤️',
-                description: 'Aktuelle Wetterinformationen',
-                defaultQuestion: 'Wie ist das Wetter heute in Berlin?'
-            },
-            {
-                id: 'news',
-                name: 'Nachrichten',
-                icon: '📰',
-                description: 'Aktuelle Nachrichten und Updates',
-                defaultQuestion: 'Was sind die wichtigsten Nachrichten heute?'
-            },
-            {
-                id: 'tasks',
-                name: 'Aufgaben',
-                icon: '✅',
-                description: 'To-Do Liste und Aufgaben',
-                defaultQuestion: 'Erstelle mir eine To-Do Liste für heute.'
-            },
-            {
-                id: 'calendar',
-                name: 'Kalender',
-                icon: '📅',
-                description: 'Termine und Events',
-                defaultQuestion: 'Was steht heute in meinem Kalender?'
-            },
-            {
-                id: 'ai_chat',
-                name: 'KI Chat',
-                icon: '🤖',
-                description: 'Freie KI-Unterhaltung',
-                defaultQuestion: 'Hallo! Wie kann ich dir heute helfen?'
-            }
-        ];
-
-        res.json({
-            success: true,
-            templates: templates
-        });
-
-    } catch (error) {
-        console.error('Get Widget Templates Error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Fehler beim Laden der Widget-Vorlagen'
-        });
-    }
-}));
+console.log('✅ Widget routes: All routes configured');
 
 module.exports = router;

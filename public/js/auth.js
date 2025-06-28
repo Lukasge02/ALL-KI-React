@@ -1,19 +1,13 @@
 /**
- * 🔐 AUTH JAVASCRIPT - VOLLSTÄNDIG FUNKTIONAL
- * Login und Registrierung Funktionalität
- * 
- * SEPARATION OF CONCERNS:
- * - Form Handling
- * - API Communication  
- * - Validation
- * - UI Updates
- * - Local Storage Management
+ * 🔐 AUTH JAVASCRIPT MIT DEBUG & VERBESSERTER VALIDATION
+ * ERSETZEN IN: public/js/auth.js
  */
 
 class AuthManager {
     constructor() {
         this.currentForm = 'login';
         this.isLoading = false;
+        this.debugMode = false;
         
         // Wait for DOM to be loaded
         if (document.readyState === 'loading') {
@@ -27,7 +21,21 @@ class AuthManager {
         console.log('🔐 AuthManager: Initializing...');
         this.initializeEventListeners();
         this.loadStoredData();
+        this.setupDebugMode();
         console.log('✅ AuthManager: Ready');
+    }
+
+    setupDebugMode() {
+        // Enable debug mode in development
+        this.debugMode = window.location.hostname === 'localhost';
+        this.updateDebug('AuthManager initialized');
+    }
+
+    updateDebug(message, isRegister = false) {
+        if (window.updateDebug) {
+            window.updateDebug(message, isRegister);
+        }
+        console.log('🔧 Auth:', message);
     }
 
     // ========================================
@@ -42,15 +50,11 @@ class AuthManager {
         if (loginForm) {
             loginForm.addEventListener('submit', (e) => this.handleLogin(e));
             console.log('✅ Login form listener attached');
-        } else {
-            console.warn('⚠️ Login form not found');
         }
         
         if (registerForm) {
             registerForm.addEventListener('submit', (e) => this.handleRegister(e));
             console.log('✅ Register form listener attached');
-        } else {
-            console.warn('⚠️ Register form not found');
         }
 
         // Form toggle buttons
@@ -62,9 +66,6 @@ class AuthManager {
                 e.preventDefault();
                 this.switchToRegister();
             });
-            console.log('✅ Toggle to register listener attached');
-        } else {
-            console.warn('⚠️ Toggle to register button not found');
         }
         
         if (toggleToLogin) {
@@ -72,27 +73,53 @@ class AuthManager {
                 e.preventDefault();
                 this.switchToLogin();
             });
-            console.log('✅ Toggle to login listener attached');
-        } else {
-            console.warn('⚠️ Toggle to login button not found');
         }
 
         // Real-time validation
         this.setupRealTimeValidation();
-        
-        // Auto-login check
-        this.checkAutoLogin();
     }
 
     setupRealTimeValidation() {
-        const inputs = document.querySelectorAll('input[type="email"], input[type="password"], input[type="text"]');
+        // Password confirmation real-time check
+        const confirmPasswordField = document.getElementById('confirmPassword');
+        const passwordField = document.getElementById('registerPassword');
         
-        inputs.forEach(input => {
-            input.addEventListener('blur', () => this.validateField(input));
-            input.addEventListener('input', () => this.clearErrors(input));
+        if (confirmPasswordField && passwordField) {
+            const checkPasswordMatch = () => {
+                const password = passwordField.value;
+                const confirmPassword = confirmPasswordField.value;
+                
+                this.updateDebug(`Password: ${password.length} chars, Confirm: ${confirmPassword.length} chars`, true);
+                
+                if (confirmPassword.length > 0) {
+                    if (password === confirmPassword) {
+                        this.clearFieldError('confirmPassword');
+                        confirmPasswordField.style.borderColor = '#28a745';
+                        this.updateDebug('✅ Passwords match', true);
+                    } else {
+                        confirmPasswordField.style.borderColor = '#dc3545';
+                        this.updateDebug('❌ Passwords do not match', true);
+                    }
+                }
+            };
+            
+            passwordField.addEventListener('input', checkPasswordMatch);
+            confirmPasswordField.addEventListener('input', checkPasswordMatch);
+            
+            console.log('✅ Real-time password validation setup');
+        }
+        
+        // Email validation
+        const emailFields = document.querySelectorAll('input[type="email"]');
+        emailFields.forEach(field => {
+            field.addEventListener('blur', () => {
+                if (field.value && !this.isValidEmail(field.value)) {
+                    this.showFieldError(field.name, 'Ungültige E-Mail-Adresse');
+                } else {
+                    this.clearFieldError(field.name);
+                }
+            });
         });
-        
-        console.log(`✅ Real-time validation setup for ${inputs.length} inputs`);
     }
 
     // ========================================
@@ -109,9 +136,7 @@ class AuthManager {
             registerForm.classList.remove('hidden');
             this.currentForm = 'register';
             this.clearAllErrors();
-            console.log('✅ Switched to register form');
-        } else {
-            console.error('❌ Could not find login or register form elements');
+            this.updateDebug('Switched to registration form', true);
         }
     }
 
@@ -125,9 +150,7 @@ class AuthManager {
             loginForm.classList.remove('hidden');
             this.currentForm = 'login';
             this.clearAllErrors();
-            console.log('✅ Switched to login form');
-        } else {
-            console.error('❌ Could not find login or register form elements');
+            this.updateDebug('Switched to login form');
         }
     }
 
@@ -140,7 +163,7 @@ class AuthManager {
         console.log('🔑 Handling login...');
         
         if (this.isLoading) {
-            console.log('⚠️ Already loading, ignoring login attempt');
+            this.updateDebug('Already loading, ignoring login attempt');
             return;
         }
 
@@ -150,30 +173,32 @@ class AuthManager {
             password: formData.get('password')
         };
 
-        console.log('📝 Login data:', { email: loginData.email, password: '***' });
+        this.updateDebug(`Login attempt: ${loginData.email} (password: ${loginData.password.length} chars)`);
 
         // Validate form
         if (!this.validateLoginForm(loginData)) {
-            console.log('❌ Login validation failed');
+            this.updateDebug('Login validation failed');
             return;
         }
 
         this.setLoadingState(true);
+        this.updateDebug('Sending login request...');
 
         try {
-            console.log('📡 Sending login request...');
             const response = await this.apiCall('/api/auth/login', 'POST', loginData);
-            console.log('📡 Login response:', response);
+            this.updateDebug(`Login response: ${JSON.stringify(response)}`);
             
             if (response.success) {
                 this.handleLoginSuccess(response);
             } else {
-                this.showError(response.message || 'Login fehlgeschlagen');
+                this.showError(response.error || response.message || 'Login fehlgeschlagen');
+                this.updateDebug(`Login failed: ${response.error || response.message}`);
             }
             
         } catch (error) {
             console.error('❌ Login error:', error);
             this.showError('Verbindungsfehler. Bitte versuchen Sie es später erneut.');
+            this.updateDebug(`Login error: ${error.message}`);
         } finally {
             this.setLoadingState(false);
         }
@@ -184,7 +209,7 @@ class AuthManager {
         console.log('👤 Handling registration...');
         
         if (this.isLoading) {
-            console.log('⚠️ Already loading, ignoring register attempt');
+            this.updateDebug('Already loading, ignoring register attempt', true);
             return;
         }
 
@@ -197,147 +222,125 @@ class AuthManager {
             confirmPassword: formData.get('confirmPassword')
         };
 
-        console.log('📝 Register data:', { 
-            firstName: registerData.firstName,
-            lastName: registerData.lastName, 
-            email: registerData.email, 
-            password: '***',
-            confirmPassword: '***'
-        });
+        this.updateDebug(`Register attempt: ${registerData.firstName} ${registerData.lastName} (${registerData.email})`, true);
+        this.updateDebug(`Password: ${registerData.password.length} chars, Confirm: ${registerData.confirmPassword.length} chars`, true);
+
+        // DETAILED validation logging
+        if (registerData.password !== registerData.confirmPassword) {
+            this.updateDebug(`❌ Password mismatch! Password: "${registerData.password}" vs Confirm: "${registerData.confirmPassword}"`, true);
+        } else {
+            this.updateDebug(`✅ Passwords match: "${registerData.password}"`, true);
+        }
 
         // Validate form
         if (!this.validateRegisterForm(registerData)) {
-            console.log('❌ Register validation failed');
+            this.updateDebug('Register validation failed', true);
             return;
         }
 
         this.setLoadingState(true);
+        this.updateDebug('Sending register request...', true);
 
         try {
-            console.log('📡 Sending register request...');
             const response = await this.apiCall('/api/auth/register', 'POST', registerData);
-            console.log('📡 Register response:', response);
+            this.updateDebug(`Register response: ${JSON.stringify(response)}`, true);
             
             if (response.success) {
                 this.handleRegisterSuccess(response);
             } else {
-                this.showError(response.message || 'Registrierung fehlgeschlagen');
+                this.showError(response.error || response.message || 'Registrierung fehlgeschlagen');
+                this.updateDebug(`Register failed: ${response.error || response.message}`, true);
             }
             
         } catch (error) {
             console.error('❌ Register error:', error);
             this.showError('Verbindungsfehler. Bitte versuchen Sie es später erneut.');
+            this.updateDebug(`Register error: ${error.message}`, true);
         } finally {
             this.setLoadingState(false);
         }
     }
 
     // ========================================
-    // VALIDATION
+    // IMPROVED VALIDATION
     // ========================================
 
     validateLoginForm(data) {
         let isValid = true;
-
-        // Clear previous errors
         this.clearAllErrors();
 
-        // Email validation
+        this.updateDebug(`Validating login: email="${data.email}", password="${data.password}"`);
+
         if (!data.email || !this.isValidEmail(data.email)) {
             this.showFieldError('email', 'Bitte geben Sie eine gültige E-Mail-Adresse ein');
             isValid = false;
         }
 
-        // Password validation
         if (!data.password || data.password.length < 6) {
             this.showFieldError('password', 'Passwort muss mindestens 6 Zeichen haben');
             isValid = false;
         }
 
+        this.updateDebug(`Login validation result: ${isValid}`);
         return isValid;
     }
 
     validateRegisterForm(data) {
         let isValid = true;
-
-        // Clear previous errors
         this.clearAllErrors();
+
+        this.updateDebug(`Validating register form...`, true);
 
         // First name validation
         if (!data.firstName || data.firstName.trim().length < 2) {
             this.showFieldError('firstName', 'Vorname muss mindestens 2 Zeichen haben');
+            this.updateDebug(`❌ First name invalid: "${data.firstName}"`, true);
             isValid = false;
         }
 
         // Last name validation
         if (!data.lastName || data.lastName.trim().length < 2) {
             this.showFieldError('lastName', 'Nachname muss mindestens 2 Zeichen haben');
+            this.updateDebug(`❌ Last name invalid: "${data.lastName}"`, true);
             isValid = false;
         }
 
         // Email validation
         if (!data.email || !this.isValidEmail(data.email)) {
             this.showFieldError('email', 'Bitte geben Sie eine gültige E-Mail-Adresse ein');
+            this.updateDebug(`❌ Email invalid: "${data.email}"`, true);
             isValid = false;
         }
 
         // Password validation
         if (!data.password || data.password.length < 6) {
             this.showFieldError('password', 'Passwort muss mindestens 6 Zeichen haben');
+            this.updateDebug(`❌ Password too short: ${data.password.length} chars`, true);
             isValid = false;
         }
 
-        // Confirm password validation
+        // Confirm password validation - EXTRA LOGGING
+        this.updateDebug(`Checking password match: "${data.password}" vs "${data.confirmPassword}"`, true);
         if (data.password !== data.confirmPassword) {
             this.showFieldError('confirmPassword', 'Passwörter stimmen nicht überein');
+            this.updateDebug(`❌ Password mismatch detected!`, true);
+            this.updateDebug(`  Password: "${data.password}" (length: ${data.password.length})`, true);
+            this.updateDebug(`  Confirm:  "${data.confirmPassword}" (length: ${data.confirmPassword.length})`, true);
             isValid = false;
+        } else {
+            this.updateDebug(`✅ Passwords match perfectly`, true);
         }
 
-        // Terms acceptance (check if checkbox exists and is checked)
+        // Terms acceptance
         const acceptTerms = document.getElementById('acceptTerms');
         if (acceptTerms && !acceptTerms.checked) {
             this.showError('Bitte akzeptieren Sie die AGB und Datenschutzerklärung');
+            this.updateDebug(`❌ Terms not accepted`, true);
             isValid = false;
         }
 
+        this.updateDebug(`Register validation result: ${isValid}`, true);
         return isValid;
-    }
-
-    validateField(input) {
-        const value = input.value.trim();
-        const fieldName = input.name;
-
-        switch (fieldName) {
-            case 'email':
-                if (!this.isValidEmail(value)) {
-                    this.showFieldError(fieldName, 'Ungültige E-Mail-Adresse');
-                    return false;
-                }
-                break;
-            case 'password':
-                if (value.length < 6) {
-                    this.showFieldError(fieldName, 'Mindestens 6 Zeichen erforderlich');
-                    return false;
-                }
-                break;
-            case 'firstName':
-            case 'lastName':
-                if (value.length < 2) {
-                    this.showFieldError(fieldName, 'Mindestens 2 Zeichen erforderlich');
-                    return false;
-                }
-                break;
-            case 'confirmPassword':
-                const passwordField = document.querySelector('input[name="password"]');
-                if (passwordField && value !== passwordField.value) {
-                    this.showFieldError(fieldName, 'Passwörter stimmen nicht überein');
-                    return false;
-                }
-                break;
-        }
-
-        this.clearFieldError(fieldName);
-        return true;
     }
 
     isValidEmail(email) {
@@ -361,61 +364,19 @@ class AuthManager {
             options.body = JSON.stringify(data);
         }
 
+        this.updateDebug(`API Call: ${method} ${url}`);
+        
         const response = await fetch(url, options);
         
+        this.updateDebug(`API Response: ${response.status} ${response.statusText}`);
+        
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            this.updateDebug(`API Error: ${errorText}`);
+            throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
         }
         
         return await response.json();
-    }
-
-    // ========================================
-    // SUCCESS HANDLERS
-    // ========================================
-
-    handleLoginSuccess(response) {
-        console.log('✅ Login successful:', response);
-        
-        // Store user data
-        if (response.token) {
-            localStorage.setItem('authToken', response.token);
-            console.log('💾 Token stored');
-        }
-        
-        if (response.user) {
-            localStorage.setItem('userData', JSON.stringify(response.user));
-            localStorage.setItem('lastEmail', response.user.email);
-            console.log('💾 User data stored');
-        }
-
-        this.showSuccess('Erfolgreich angemeldet! Weiterleitung...');
-
-        // Redirect to dashboard
-        setTimeout(() => {
-            console.log('🔄 Redirecting to dashboard...');
-            window.location.href = '/dashboard';
-        }, 1500);
-    }
-
-    handleRegisterSuccess(response) {
-        console.log('✅ Registration successful:', response);
-        
-        this.showSuccess('Registrierung erfolgreich! Sie können sich jetzt anmelden.');
-        
-        // Switch to login form
-        setTimeout(() => {
-            this.switchToLogin();
-            
-            // Pre-fill email if available
-            if (response.email || response.user?.email) {
-                const emailInput = document.querySelector('#loginForm input[name="email"]');
-                if (emailInput) {
-                    emailInput.value = response.email || response.user.email;
-                    console.log('📧 Email pre-filled in login form');
-                }
-            }
-        }, 2000);
     }
 
     // ========================================
@@ -433,7 +394,6 @@ class AuthManager {
             if (loading) {
                 btn.textContent = 'Wird verarbeitet...';
             } else {
-                // Reset button text based on current form
                 if (btn.closest('#loginForm')) {
                     btn.textContent = 'Anmelden';
                 } else if (btn.closest('#registerForm')) {
@@ -446,7 +406,7 @@ class AuthManager {
             form.classList.toggle('form-loading', loading);
         });
         
-        console.log(`🔄 Loading state: ${loading}`);
+        this.updateDebug(`Loading state: ${loading}`);
     }
 
     showError(message, fieldName = null) {
@@ -456,166 +416,172 @@ class AuthManager {
             this.showFieldError(fieldName, message);
         } else {
             // Show general error
-            this.clearGeneralMessages();
-
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'general-error';
-            errorDiv.textContent = message;
-            
-            const activeForm = document.querySelector('.auth-form:not(.hidden)');
-            if (activeForm) {
-                const formHeader = activeForm.querySelector('.form-header');
-                if (formHeader) {
-                    formHeader.insertAdjacentElement('afterend', errorDiv);
+            let errorContainer = document.querySelector('.error-message');
+            if (!errorContainer) {
+                errorContainer = document.createElement('div');
+                errorContainer.className = 'error-message';
+                errorContainer.style.cssText = `
+                    background: #f8d7da;
+                    color: #721c24;
+                    padding: 12px;
+                    border-radius: 4px;
+                    margin: 10px 0;
+                    border: 1px solid #f5c6cb;
+                `;
+                
+                const activeForm = document.querySelector('.auth-form:not(.hidden)');
+                if (activeForm) {
+                    const form = activeForm.querySelector('form');
+                    form.insertBefore(errorContainer, form.firstChild);
                 }
             }
+            errorContainer.textContent = message;
+            errorContainer.style.display = 'block';
         }
+        
+        this.updateDebug(`Error shown: ${message}`);
     }
 
     showSuccess(message) {
         console.log('✅ Showing success:', message);
         
-        this.clearGeneralMessages();
-
-        const successDiv = document.createElement('div');
-        successDiv.className = 'general-success';
-        successDiv.textContent = message;
-        
-        const activeForm = document.querySelector('.auth-form:not(.hidden)');
-        if (activeForm) {
-            const formHeader = activeForm.querySelector('.form-header');
-            if (formHeader) {
-                formHeader.insertAdjacentElement('afterend', successDiv);
+        let successContainer = document.querySelector('.success-message');
+        if (!successContainer) {
+            successContainer = document.createElement('div');
+            successContainer.className = 'success-message';
+            successContainer.style.cssText = `
+                background: #d4edda;
+                color: #155724;
+                padding: 12px;
+                border-radius: 4px;
+                margin: 10px 0;
+                border: 1px solid #c3e6cb;
+            `;
+            
+            const activeForm = document.querySelector('.auth-form:not(.hidden)');
+            if (activeForm) {
+                const form = activeForm.querySelector('form');
+                form.insertBefore(successContainer, form.firstChild);
             }
         }
+        
+        successContainer.textContent = message;
+        successContainer.style.display = 'block';
+        
+        this.updateDebug(`Success shown: ${message}`);
     }
 
     showFieldError(fieldName, message) {
-        const input = document.querySelector(`input[name="${fieldName}"]`);
-        if (!input) {
-            console.warn(`⚠️ Field not found: ${fieldName}`);
-            return;
+        const field = document.querySelector(`input[name="${fieldName}"]`);
+        if (field) {
+            field.style.borderColor = '#dc3545';
+            
+            // Remove existing error
+            const existingError = field.parentNode.querySelector('.field-error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            // Add error message
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'field-error';
+            errorDiv.textContent = message;
+            errorDiv.style.cssText = `
+                color: #dc3545;
+                font-size: 12px;
+                margin-top: 4px;
+            `;
+            
+            field.parentNode.appendChild(errorDiv);
         }
-
-        input.classList.add('form-error');
-        
-        // Remove existing error
-        const existingError = input.parentNode.querySelector('.error-message');
-        if (existingError) {
-            existingError.remove();
-        }
-
-        // Add new error
-        const errorSpan = document.createElement('span');
-        errorSpan.className = 'error-message';
-        errorSpan.textContent = message;
-        input.parentNode.appendChild(errorSpan);
     }
 
     clearFieldError(fieldName) {
-        const input = document.querySelector(`input[name="${fieldName}"]`);
-        if (!input) return;
-
-        input.classList.remove('form-error');
-        
-        const error = input.parentNode.querySelector('.error-message');
-        if (error) {
-            error.remove();
-        }
-    }
-
-    clearErrors(input) {
-        input.classList.remove('form-error');
-        const error = input.parentNode.querySelector('.error-message');
-        if (error) {
-            error.remove();
+        const field = document.querySelector(`input[name="${fieldName}"]`);
+        if (field) {
+            field.style.borderColor = '';
+            const error = field.parentNode.querySelector('.field-error');
+            if (error) {
+                error.remove();
+            }
         }
     }
 
     clearAllErrors() {
         // Clear field errors
-        const errorInputs = document.querySelectorAll('.form-error');
-        errorInputs.forEach(input => {
-            input.classList.remove('form-error');
+        document.querySelectorAll('.field-error').forEach(el => el.remove());
+        document.querySelectorAll('input').forEach(input => {
+            input.style.borderColor = '';
         });
-
-        const errorMessages = document.querySelectorAll('.error-message');
-        errorMessages.forEach(error => error.remove());
-
-        // Clear general messages
-        this.clearGeneralMessages();
-    }
-
-    clearGeneralMessages() {
-        const existingMessages = document.querySelectorAll('.general-error, .general-success');
-        existingMessages.forEach(msg => msg.remove());
-    }
-
-    // ========================================
-    // AUTO-LOGIN & STORAGE
-    // ========================================
-
-    checkAutoLogin() {
-        const token = localStorage.getItem('authToken');
-        const userData = localStorage.getItem('userData');
         
-        if (token && userData) {
-            console.log('🔍 Found stored credentials, validating...');
-            // Check if token is still valid
-            this.validateStoredToken(token);
-        } else {
-            console.log('ℹ️ No stored credentials found');
+        // Clear general errors
+        const errorMessage = document.querySelector('.error-message');
+        if (errorMessage) {
+            errorMessage.style.display = 'none';
+        }
+        
+        const successMessage = document.querySelector('.success-message');
+        if (successMessage) {
+            successMessage.style.display = 'none';
         }
     }
 
-    async validateStoredToken(token) {
-        try {
-            const response = await this.apiCall('/api/auth/validate', 'POST', { token });
-            
-            if (response.valid) {
-                console.log('✅ Token is valid, redirecting to dashboard');
-                // Token is valid, redirect to dashboard
-                window.location.href = '/dashboard';
-            } else {
-                console.log('❌ Token is invalid, clearing storage');
-                // Token is invalid, clear storage
-                this.clearStoredData();
-            }
-        } catch (error) {
-            console.log('❌ Error validating token, clearing storage');
-            // Error validating token, clear storage
-            this.clearStoredData();
+    // ========================================
+    // SUCCESS HANDLERS
+    // ========================================
+
+    handleLoginSuccess(response) {
+        console.log('✅ Login successful:', response);
+        
+        if (response.token) {
+            localStorage.setItem('authToken', response.token);
         }
+        
+        if (response.user) {
+            localStorage.setItem('userData', JSON.stringify(response.user));
+            localStorage.setItem('lastEmail', response.user.email);
+        }
+
+        this.showSuccess('Erfolgreich angemeldet! Weiterleitung...');
+        this.updateDebug('Login successful, redirecting...');
+
+        setTimeout(() => {
+            window.location.href = '/dashboard';
+        }, 1500);
     }
+
+    handleRegisterSuccess(response) {
+        console.log('✅ Registration successful:', response);
+        
+        this.showSuccess('Registrierung erfolgreich! Sie können sich jetzt anmelden.');
+        this.updateDebug('Registration successful, switching to login', true);
+        
+        setTimeout(() => {
+            this.switchToLogin();
+            
+            if (response.email || response.user?.email) {
+                const emailInput = document.querySelector('#loginForm input[name="email"]');
+                if (emailInput) {
+                    emailInput.value = response.email || response.user.email;
+                }
+            }
+        }, 2000);
+    }
+
+    // ========================================
+    // UTILITY
+    // ========================================
 
     loadStoredData() {
-        // Pre-fill email if available
         const lastEmail = localStorage.getItem('lastEmail');
         if (lastEmail) {
-            const emailInput = document.querySelector('#loginForm input[name="email"]');
+            const emailInput = document.querySelector('input[name="email"]');
             if (emailInput) {
                 emailInput.value = lastEmail;
-                console.log('📧 Last email loaded:', lastEmail);
             }
         }
     }
-
-    clearStoredData() {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('userData');
-        console.log('🗑️ Stored auth data cleared');
-    }
 }
 
-// ========================================
-// INITIALIZATION
-// ========================================
-
-// Initialize AuthManager when script loads
-console.log('🚀 Starting AuthManager...');
+// Initialize AuthManager
 const authManager = new AuthManager();
-
-// Export for testing (if needed)
-if (typeof window !== 'undefined') {
-    window.authManager = authManager;
-}
